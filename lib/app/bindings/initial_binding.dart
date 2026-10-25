@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import '../../core/clock.dart';
 import '../../data/api/fgv_api.dart';
 import '../../data/repositories/favorites_repository.dart';
+import '../../data/repositories/incident_repository.dart';
+import '../../data/repositories/line_repository.dart';
 import '../../data/repositories/station_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
 import '../../data/storage/local_store.dart';
@@ -22,5 +24,7 @@ class InitialBinding extends Bindings {
     Get.put(StationRepository(api, store, clock), permanent: true);
     Get.put(TimetableRepository(api, store, clock), permanent: true);
     Get.put(FavoritesRepository(store), permanent: true);
+    Get.put(LineRepository(api, store, clock), permanent: true);
+    Get.put(IncidentRepository(api, store, clock), permanent: true);
   }
 }

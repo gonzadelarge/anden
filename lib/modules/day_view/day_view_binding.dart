@@ -6,6 +6,6 @@ import 'day_view_controller.dart';
 class DayViewBinding extends Bindings {
   @override
   void dependencies() {
-    Get.lazyPut(() => DayViewController(Get.arguments as TripDirection, Get.find(), Get.find()));
+    Get.lazyPut(() => DayViewController(Get.arguments as TripDirection, Get.find(), Get.find(), Get.find()));
   }
 }

@@ -5,6 +5,7 @@ import '../../app/app_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/time_format.dart';
 import '../../data/models/favorite_trip.dart';
+import '../../shared/section_header.dart';
 import 'home_controller.dart';
 import 'widgets/trip_card.dart';
 
@@ -26,7 +27,7 @@ class HomeView extends GetView<HomeController> {
             return CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                SliverToBoxAdapter(child: _Header(now: now, onAdd: controller.addTrip)),
+                SliverToBoxAdapter(child: _header(context, now)),
                 if (controller.offline.value && trips.isNotEmpty) const SliverToBoxAdapter(child: _OfflineNote()),
                 if (trips.isEmpty)
                   SliverFillRemaining(hasScrollBody: false, child: _EmptyState(onAdd: controller.addTrip))
@@ -48,6 +49,25 @@ class HomeView extends GetView<HomeController> {
   }
 }
 
+Widget _header(BuildContext context, DateTime now) {
+  final t = AppTokens.of(context);
+  final day = formatDayLong(now);
+  return SectionHeader(
+    overline: appName,
+    title: '${day[0].toUpperCase()}${day.substring(1)}',
+    action: IconButton(
+      onPressed: Get.find<HomeController>().addTrip,
+      tooltip: 'Añadir trayecto',
+      style: IconButton.styleFrom(
+        backgroundColor: t.surface,
+        side: BorderSide(color: t.border),
+        fixedSize: const Size(48, 48),
+      ),
+      icon: Icon(Icons.add_rounded, color: t.text),
+    ),
+  );
+}
+
 class _TripGroup extends GetView<HomeController> {
   const _TripGroup({required this.trip, required this.now});
 
@@ -67,6 +87,7 @@ class _TripGroup extends GetView<HomeController> {
             now: now,
             onTap: () => controller.openDay(d),
             onLongPress: () => _confirmDelete(context),
+            onDelete: () => _confirmDelete(context),
             onRetry: () => controller.refreshAll(force: true),
           ),
         ],
@@ -107,52 +128,6 @@ class _TripGroup extends GetView<HomeController> {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.now, required this.onAdd});
-
-  final DateTime now;
-  final VoidCallback onAdd;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTokens.of(context);
-    final day = formatDayLong(now);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  appName.toUpperCase(),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.6, color: t.faint),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${day[0].toUpperCase()}${day.substring(1)}',
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, letterSpacing: -0.5, color: t.text),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            onPressed: onAdd,
-            tooltip: 'Añadir trayecto',
-            style: IconButton.styleFrom(
-              backgroundColor: t.surface,
-              side: BorderSide(color: t.border),
-              fixedSize: const Size(48, 48),
-            ),
-            icon: Icon(Icons.add_rounded, color: t.text),
-          ),
-        ],
       ),
     );
   }

@@ -10,6 +10,8 @@ import '../../data/models/favorite_trip.dart';
 import '../../data/repositories/favorites_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
 import '../../data/services/next_departures.dart';
+import '../../shared/messages.dart';
+import '../../shared/pick_station.dart';
 
 /// What the home knows about one direction of a trip.
 class DirectionState {
@@ -53,6 +55,8 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     now = _clock.now().obs;
     _serviceDay = _today;
     _loadTrips();
+    // Trips can also be saved or removed from the day view.
+    ever(_favorites.revision, (_) => _onTripsChanged());
     WidgetsBinding.instance.addObserver(this);
     _ticker = Timer.periodic(tickInterval, (_) => _tick());
   }
@@ -100,16 +104,24 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> addTrip() async {
-    final added = await Get.toNamed(Routes.addTrip);
-    if (added == true) {
-      _loadTrips();
-      await refreshAll();
-    }
+    final trip = await pickTrip();
+    if (trip == null) return;
+    final (origin, destination) = trip;
+    final added = await _favorites.add(
+      FavoriteTrip(aId: origin.id, aName: origin.name, bId: destination.id, bName: destination.name),
+    );
+    if (!added) showMessage('Ese trayecto ya estaba guardado');
   }
 
-  Future<void> deleteTrip(FavoriteTrip trip) async {
-    await _favorites.remove(trip.id);
+  Future<void> deleteTrip(FavoriteTrip trip) => _favorites.remove(trip.id);
+
+  void _onTripsChanged() {
+    final known = states.keys.toSet();
     _loadTrips();
+    final added = trips.expand((t) => t.directions).where((d) => !known.contains(d.key));
+    for (final d in added) {
+      _refresh(d, force: false);
+    }
   }
 
   void _tick() {

@@ -14,20 +14,35 @@ In v1:
 2. **Day view.** Tap a card to see all departures for that direction, scrolled to the current
    time. Past trains are dimmed, the next one is marked. A switch shows today or tomorrow.
 3. **Add a trip.** Pick station A, then station B, from a list with accent-insensitive search.
-4. **Delete a trip.** Long press on a card.
+4. **Delete a trip.** The "x" on a card, or a long press. Both ask for confirmation and remove
+   both directions.
 
-Not in v1: real-time arrivals, incidents, widget, smart ordering by time of day, walking time,
+Added in v1.1:
+
+5. **Bottom bar** with three tabs: Inicio, Horarios, Incidencias.
+6. **Horarios tab.** Pick origin and destination and open the day view, without saving the trip.
+   The day view can show any date up to 60 days ahead and has a button to save or remove the
+   trip from Inicio.
+7. **Incidencias tab.** Current incidents from `GET incidencias`, with the line name from
+   `GET lineas`. The tab shows a badge with the number of incidents. FGV recreates every
+   incident (new id and timestamp) each time it publishes the list, so the app shows no start
+   time.
+
+Not in v1: real-time arrivals, widget, smart ordering by time of day, walking time,
 trips with a change of line shown leg by leg (they work, but only the first leg's departures
 are shown).
 
 ## User flow
 
 ```
-Open app ──> Home (cached data shown at once, refresh in background)
+Open app ──> Inicio (cached data shown at once, refresh in background)
                │
-               ├── tap card ──> Day view (today | tomorrow)
-               ├── long press card ──> confirm delete trip
-               └── "+" ──> pick origin ──> pick destination ──> back to Home
+               ├── tap card ──> Day view (today | tomorrow | other date)
+               ├── "x" or long press ──> confirm delete trip
+               └── "+" ──> pick origin ──> pick destination ──> back to Inicio
+
+Horarios ──> pick origin, pick destination ──> Day view ──> optional "save to Inicio"
+Incidencias ──> list, pull to refresh
 ```
 
 ## Design
@@ -67,10 +82,14 @@ lib/
       timetable_repository.dart day timetable per direction, cached per date
       favorites_repository.dart saved trips
     services/next_departures.dart  "next N trains" across today and tomorrow
+  shared/                       station picking flow, section header, messages
   modules/
-    home/                       binding, controller, view, widgets
-    day_view/                   binding, controller, view
-    add_trip/                   binding, controller, view
+    shell/                      bottom bar; binding creates the three tab controllers
+    home/                       Inicio tab
+    lookup/                     Horarios tab
+    incidents/                  Incidencias tab
+    day_view/                   full day for one direction
+    station_picker/             station search; owns its controller (opened twice in a row)
 ```
 
 ### Data flow
@@ -115,6 +134,6 @@ across midnight, accent-insensitive search, and the favourites repository.
 ## Later versions
 
 - Home-screen widget with the next trains of the first trip.
-- Incident banner from `GET incidencias`.
+- Show on a trip card when an incident affects its line.
 - Real-time arrivals from `horarios-prevision-3/{estacion_id_FGV}`.
 - Reorder trips.

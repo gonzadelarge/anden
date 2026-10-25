@@ -132,6 +132,15 @@ void main() {
       expect(trip.directions.map((d) => d.key), ['560-552', '552-560']);
     });
 
+    test('revision goes up on every change', () async {
+      final repo = FavoritesRepository(store);
+      await repo.add(trip);
+      await repo.remove(trip.id);
+
+      expect(repo.revision.value, 2);
+      expect(repo.contains(trip.id), isFalse);
+    });
+
     test('removes a trip', () async {
       final repo = FavoritesRepository(store);
       await repo.add(trip);

@@ -15,6 +15,7 @@ class TripCard extends StatelessWidget {
     required this.now,
     required this.onTap,
     required this.onLongPress,
+    required this.onDelete,
     required this.onRetry,
   });
 
@@ -24,6 +25,7 @@ class TripCard extends StatelessWidget {
   final DateTime now;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final VoidCallback onDelete;
   final VoidCallback onRetry;
 
   @override
@@ -40,13 +42,15 @@ class TripCard extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+          // Small top/right padding puts the close button in the corner; the
+          // body adds the rest back so content keeps a 20 px margin.
+          padding: const EdgeInsets.fromLTRB(20, 4, 4, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _RouteLine(direction: direction),
-              const SizedBox(height: 14),
-              _body(context, t),
+              _RouteLine(direction: direction, onDelete: onDelete),
+              const SizedBox(height: 2),
+              Padding(padding: const EdgeInsets.only(right: 16), child: _body(context, t)),
             ],
           ),
         ),
@@ -92,9 +96,10 @@ class TripCard extends StatelessWidget {
 }
 
 class _RouteLine extends StatelessWidget {
-  const _RouteLine({required this.direction});
+  const _RouteLine({required this.direction, required this.onDelete});
 
   final TripDirection direction;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -102,12 +107,32 @@ class _RouteLine extends StatelessWidget {
     final style = TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: t.text, height: 1.2);
     return Row(
       children: [
-        Flexible(child: Text(direction.originName, style: style, overflow: TextOverflow.ellipsis)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Icon(Icons.arrow_forward_rounded, size: 16, color: t.faint),
+        // One text for the whole route: it uses all the width up to the close
+        // button and is only cut at the end when both names do not fit.
+        Expanded(
+          child: Text.rich(
+            TextSpan(children: [
+              TextSpan(text: direction.originName),
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.arrow_forward_rounded, size: 16, color: t.faint),
+                ),
+              ),
+              TextSpan(text: direction.destinationName),
+            ]),
+            style: style,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        Flexible(child: Text(direction.destinationName, style: style, overflow: TextOverflow.ellipsis)),
+        IconButton(
+          onPressed: onDelete,
+          tooltip: 'Eliminar trayecto',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.close_rounded, size: 18, color: t.faint),
+        ),
       ],
     );
   }

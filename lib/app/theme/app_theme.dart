@@ -199,6 +199,30 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(color: t.accent),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: t.surface,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: t.accentSoft,
+        height: 68,
+        elevation: 0,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontSize: 12,
+            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w600 : FontWeight.w500,
+            color: states.contains(WidgetState.selected) ? t.text : t.muted,
+          ),
+        ),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(color: states.contains(WidgetState.selected) ? t.accent : t.muted),
+        ),
+      ),
+      badgeTheme: BadgeThemeData(backgroundColor: t.accent, textColor: t.onAccent),
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: t.surface,
+        surfaceTintColor: Colors.transparent,
+        headerBackgroundColor: t.surface,
+        headerForegroundColor: t.text,
+      ),
     );
   }
 }

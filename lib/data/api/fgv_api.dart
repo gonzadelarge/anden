@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 
 import '../../core/time_format.dart';
 import '../models/day_timetable.dart';
+import '../models/incident.dart';
+import '../models/line.dart';
 import '../models/station.dart';
 
 class FgvApiException implements Exception {
@@ -38,6 +40,23 @@ class FgvApi {
         .where((s) => s['sede'] == 'V' && s['deleted_at'] == null)
         .map(Station.fromApi)
         .toList();
+  }
+
+  Future<List<Line>> fetchLines() async {
+    final body = await _send(() => _client.get(baseUrl.resolve('lineas'), headers: _headers));
+    return (body as List)
+        .cast<Map<String, dynamic>>()
+        .where((l) => l['sede'] == 'V' && l['deleted_at'] == null)
+        .map(Line.fromApi)
+        .toList();
+  }
+
+  Future<List<Incident>> fetchIncidents() async {
+    final body = await _send(() => _client.get(baseUrl.resolve('incidencias'), headers: _headers));
+    if (body is! Map<String, dynamic>) {
+      throw FgvApiException('Unexpected incidents body');
+    }
+    return Incident.listFromApi(body);
   }
 
   /// [originId] and [destinationId] are [Station.id], not [Station.fgvId].

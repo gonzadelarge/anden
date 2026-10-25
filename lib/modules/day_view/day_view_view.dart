@@ -16,6 +16,14 @@ class DayViewView extends GetView<DayViewController> {
       appBar: AppBar(
         title: const Text('Horarios'),
         actions: [
+          Obx(() => IconButton(
+                onPressed: controller.toggleSaved,
+                tooltip: controller.saved.value ? 'Quitar de Inicio' : 'Guardar en Inicio',
+                icon: Icon(
+                  controller.saved.value ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                  color: controller.saved.value ? t.accent : null,
+                ),
+              )),
           IconButton(
             onPressed: controller.swap,
             tooltip: 'Cambiar sentido',
@@ -35,16 +43,34 @@ class DayViewView extends GetView<DayViewController> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: Obx(() {
-              final today = controller.now.value;
-              final tomorrow = DateTime(today.year, today.month, today.day + 1);
-              return SegmentedButton<int>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(value: 0, label: Text('Hoy · ${today.day}/${today.month}')),
-                  ButtonSegment(value: 1, label: Text('Mañana · ${tomorrow.day}/${tomorrow.month}')),
+              controller.now.value;
+              final today = controller.today;
+              final tomorrow = controller.tomorrow;
+              final date = controller.date.value;
+              final other = date != today && date != tomorrow;
+              return Row(
+                children: [
+                  Expanded(
+                    child: SegmentedButton<DateTime>(
+                      showSelectedIcon: false,
+                      emptySelectionAllowed: true,
+                      segments: [
+                        ButtonSegment(value: today, label: const Text('Hoy')),
+                        ButtonSegment(value: tomorrow, label: const Text('Mañana')),
+                      ],
+                      selected: other ? {} : {date},
+                      onSelectionChanged: (s) {
+                        if (s.isNotEmpty) controller.selectDate(s.first);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _DateButton(
+                    label: other ? '${formatWeekdayShort(date)} ${date.day}/${date.month}' : 'Otro día',
+                    selected: other,
+                    onPressed: () => _pickDate(context),
+                  ),
                 ],
-                selected: {controller.dayOffset.value},
-                onSelectionChanged: (s) => controller.selectDay(s.first),
               );
             }),
           ),
@@ -55,10 +81,21 @@ class DayViewView extends GetView<DayViewController> {
     );
   }
 
+  Future<void> _pickDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: controller.date.value,
+      firstDate: controller.today,
+      lastDate: controller.lastSelectableDay,
+      helpText: 'Elige un día',
+    );
+    if (picked != null) controller.selectDate(picked);
+  }
+
   Widget _list(BuildContext context, AppTokens t) {
     final timetable = controller.timetable.value;
     final now = controller.now.value;
-    final isToday = controller.dayOffset.value == 0;
+    final isToday = controller.isToday;
     final nextIndex = isToday ? controller.nextIndex : 0;
 
     if (timetable == null) {
@@ -93,6 +130,31 @@ class DayViewView extends GetView<DayViewController> {
             showUntil: isToday && !past && time.difference(now).inMinutes < 60,
           );
         },
+      ),
+    );
+  }
+}
+
+class _DateButton extends StatelessWidget {
+  const _DateButton({required this.label, required this.selected, required this.onPressed});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTokens.of(context);
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(Icons.calendar_today_rounded, size: 16, color: selected ? t.background : t.muted),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 40),
+        backgroundColor: selected ? t.text : t.surface,
+        foregroundColor: selected ? t.background : t.muted,
+        side: BorderSide(color: t.border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

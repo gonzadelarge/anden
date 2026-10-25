@@ -33,3 +33,8 @@ String formatUntil(DateTime departure, DateTime now) {
 
 /// True when [t] falls on a later calendar day than [now].
 bool isAfterToday(DateTime t, DateTime now) => dateOnly(t).isAfter(dateOnly(now));
+
+const _weekdaysShort = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
+
+/// "sáb"
+String formatWeekdayShort(DateTime d) => _weekdaysShort[d.weekday - 1];
