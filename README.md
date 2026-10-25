@@ -15,15 +15,14 @@ flutter test
 flutter analyze
 ```
 
-Install on a phone without the Play Store:
+Publish a new version to the phones (through HomePi):
 
 ```sh
-flutter build apk --release
-# then copy build/app/outputs/flutter-apk/app-release.apk to the phone
+scripts/publish-homepi.sh
 ```
 
-The release build is signed with the debug key (fine for private use). Add a real signing
-config in `android/app/build.gradle.kts` before giving the APK to anyone else.
+Raise `version` in `pubspec.yaml` first. Full steps, rules and the signing key note:
+[docs/publishing-homepi.md](docs/publishing-homepi.md).
 
 ## Stack
 
