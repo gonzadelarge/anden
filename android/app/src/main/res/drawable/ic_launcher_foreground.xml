@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three timetable rows; the first one marked as the next train. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#7D9BFF"
+        android:pathData="M31,42a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+    <path
+        android:strokeColor="#F1F1EF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:pathData="M49,42H75" />
+    <path
+        android:strokeColor="#9A9DA3"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:pathData="M49,55H69" />
+    <path
+        android:strokeColor="#5A5D63"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:pathData="M49,68H63" />
+</vector>

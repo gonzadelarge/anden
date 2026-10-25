@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same values as AppTokens.light / AppTokens.dark in lib/app/theme/app_theme.dart -->
+    <color name="app_background">#F5F5F3</color>
+    <color name="ic_launcher_background">#111214</color>
+</resources>

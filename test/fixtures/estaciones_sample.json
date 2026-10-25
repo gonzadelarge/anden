@@ -1,0 +1,54 @@
+[
+ {
+  "id": 226,
+  "estacion_id_FGV": 12,
+  "nombre": "Benimaclet",
+  "transbordo": 1,
+  "latitud": 39.4848518372,
+  "longitud": -0.3623333275,
+  "direccion": "C/ Emilio Bar\u00f3, frente 11; CP 46020. Valencia.",
+  "sede": "V",
+  "created_at": "2017-11-06T08:55:57.000000Z",
+  "updated_at": "2026-10-25T02:00:03.000000Z",
+  "deleted_at": null
+ },
+ {
+  "id": 552,
+  "estacion_id_FGV": 15,
+  "nombre": "Col\u00f3n",
+  "transbordo": 1,
+  "latitud": 39.4701461792,
+  "longitud": -0.3709277809,
+  "direccion": "Pl. de los Pinazo, frente 5; CP 46002. Valencia",
+  "sede": "V",
+  "created_at": "2024-12-02T21:08:16.000000Z",
+  "updated_at": "2026-10-25T02:00:03.000000Z",
+  "deleted_at": null
+ },
+ {
+  "id": 554,
+  "estacion_id_FGV": 17,
+  "nombre": "\u00c0ngel Guimer\u00e0",
+  "transbordo": 1,
+  "latitud": 39.4703025818,
+  "longitud": -0.3850361109,
+  "direccion": "Gran V\u00eda Fernando el Cat\u00f3lico, 15; CP 46018. Valencia.",
+  "sede": "V",
+  "created_at": "2024-12-02T21:08:16.000000Z",
+  "updated_at": "2026-10-25T02:00:03.000000Z",
+  "deleted_at": null
+ },
+ {
+  "id": 560,
+  "estacion_id_FGV": 23,
+  "nombre": "Amistat",
+  "transbordo": 0,
+  "latitud": 39.4703330994,
+  "longitud": -0.3503944576,
+  "direccion": "C/ Santos Justo y Pastor, 37; CP 46022. Valencia",
+  "sede": "V",
+  "created_at": "2024-12-02T21:08:17.000000Z",
+  "updated_at": "2026-10-25T02:00:03.000000Z",
+  "deleted_at": null
+ }
+]
