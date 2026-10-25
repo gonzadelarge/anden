@@ -12,6 +12,7 @@ import '../../data/repositories/timetable_repository.dart';
 import '../../data/services/next_departures.dart';
 import '../../shared/messages.dart';
 import '../../shared/pick_station.dart';
+import 'nearby_controller.dart';
 
 /// What the home knows about one direction of a trip.
 class DirectionState {
@@ -28,13 +29,14 @@ class DirectionState {
 }
 
 class HomeController extends GetxController with WidgetsBindingObserver {
-  HomeController(this._favorites, this._timetables, this._clock);
+  HomeController(this._favorites, this._timetables, this._clock, this.nearby);
 
   static const tickInterval = Duration(seconds: 20);
 
   final FavoritesRepository _favorites;
   final TimetableRepository _timetables;
   final Clock _clock;
+  final NearbyController nearby;
 
   final trips = <FavoriteTrip>[].obs;
   final states = <String, DirectionState>{}.obs;
@@ -66,6 +68,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     super.onReady();
     _timetables.prunePastDays();
     refreshAll();
+    nearby.locate(_directions);
   }
 
   @override
@@ -80,7 +83,24 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _tick();
       refreshAll();
+      nearby.locate(_directions);
     }
+  }
+
+  List<TripDirection> get _directions => trips.expand((t) => t.directions).toList();
+
+  /// Saved order, except that the trip with a highlighted card comes first.
+  List<FavoriteTrip> get orderedTrips {
+    final marked = nearby.highlighted;
+    if (marked.isEmpty) return trips;
+    bool hit(FavoriteTrip t) => t.directions.any((d) => marked.contains(d.key));
+    return [...trips.where(hit), ...trips.where((t) => !hit(t))];
+  }
+
+  /// Both directions of [trip], the highlighted one first.
+  List<TripDirection> directionsOf(FavoriteTrip trip) {
+    final marked = nearby.highlighted;
+    return [...trip.directions]..sort((a, b) => (marked.contains(a.key) ? 0 : 1) - (marked.contains(b.key) ? 0 : 1));
   }
 
   DirectionState stateOf(TripDirection d) => states[d.key] ?? const DirectionState();
@@ -98,6 +118,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> openDay(TripDirection d) async {
+    nearby.onCardOpened(d);
     await Get.toNamed(Routes.dayView, arguments: d);
     // The day view may have downloaded newer data.
     _loadFromCache();
@@ -122,6 +143,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     for (final d in added) {
       _refresh(d, force: false);
     }
+    nearby.reevaluate(_directions);
   }
 
   void _tick() {

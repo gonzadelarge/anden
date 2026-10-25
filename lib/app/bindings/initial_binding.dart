@@ -5,9 +5,11 @@ import '../../core/clock.dart';
 import '../../data/api/fgv_api.dart';
 import '../../data/repositories/favorites_repository.dart';
 import '../../data/repositories/incident_repository.dart';
+import '../../data/repositories/learned_places_repository.dart';
 import '../../data/repositories/line_repository.dart';
 import '../../data/repositories/station_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
+import '../../data/services/location_service.dart';
 import '../../data/storage/local_store.dart';
 
 /// App-wide services. They live for the whole app session.
@@ -26,5 +28,7 @@ class InitialBinding extends Bindings {
     Get.put(FavoritesRepository(store), permanent: true);
     Get.put(LineRepository(api, store, clock), permanent: true);
     Get.put(IncidentRepository(api, store, clock), permanent: true);
+    Get.put(LearnedPlacesRepository(store, clock), permanent: true);
+    Get.put<LocationService>(GeolocatorLocationService(), permanent: true);
   }
 }

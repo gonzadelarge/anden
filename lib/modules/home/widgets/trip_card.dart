@@ -10,6 +10,7 @@ class TripCard extends StatelessWidget {
   const TripCard({
     super.key,
     required this.direction,
+    this.highlight,
     required this.state,
     required this.next,
     required this.now,
@@ -20,6 +21,9 @@ class TripCard extends StatelessWidget {
   });
 
   final TripDirection direction;
+
+  /// Label shown when the card is highlighted by location ("Cerca de ti").
+  final String? highlight;
   final DirectionState state;
   final List<DateTime> next;
   final DateTime now;
@@ -35,7 +39,7 @@ class TripCard extends StatelessWidget {
       color: t.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radius),
-        side: BorderSide(color: t.border),
+        side: highlight == null ? BorderSide(color: t.border) : BorderSide(color: t.accent, width: 1.5),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -48,7 +52,7 @@ class TripCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _RouteLine(direction: direction, onDelete: onDelete),
+              _RouteLine(direction: direction, highlight: highlight, onDelete: onDelete),
               const SizedBox(height: 2),
               Padding(padding: const EdgeInsets.only(right: 16), child: _body(context, t)),
             ],
@@ -79,7 +83,9 @@ class TripCard extends StatelessWidget {
         height: 52,
         child: Row(
           children: [
-            Expanded(child: Text('No se pudieron cargar los horarios', style: TextStyle(color: t.muted))),
+            Expanded(
+              child: Text('No se pudieron cargar los horarios', style: TextStyle(color: t.muted)),
+            ),
             TextButton(onPressed: onRetry, child: const Text('Reintentar')),
           ],
         ),
@@ -96,9 +102,10 @@ class TripCard extends StatelessWidget {
 }
 
 class _RouteLine extends StatelessWidget {
-  const _RouteLine({required this.direction, required this.onDelete});
+  const _RouteLine({required this.direction, required this.highlight, required this.onDelete});
 
   final TripDirection direction;
+  final String? highlight;
   final VoidCallback onDelete;
 
   @override
@@ -110,21 +117,42 @@ class _RouteLine extends StatelessWidget {
         // One text for the whole route: it uses all the width up to the close
         // button and is only cut at the end when both names do not fit.
         Expanded(
-          child: Text.rich(
-            TextSpan(children: [
-              TextSpan(text: direction.originName),
-              WidgetSpan(
-                alignment: PlaceholderAlignment.middle,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Icon(Icons.arrow_forward_rounded, size: 16, color: t.faint),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (highlight != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10, bottom: 2),
+                  child: Row(
+                    children: [
+                      Icon(Icons.near_me_rounded, size: 13, color: t.accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        highlight!,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.accent),
+                      ),
+                    ],
+                  ),
                 ),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: direction.originName),
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Icon(Icons.arrow_forward_rounded, size: 16, color: t.faint),
+                      ),
+                    ),
+                    TextSpan(text: direction.destinationName),
+                  ],
+                ),
+                style: style,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              TextSpan(text: direction.destinationName),
-            ]),
-            style: style,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            ],
           ),
         ),
         IconButton(

@@ -5,6 +5,7 @@ import '../../app/app_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/time_format.dart';
 import '../../data/models/favorite_trip.dart';
+import '../../data/services/nearby_direction.dart';
 import '../../shared/section_header.dart';
 import 'home_controller.dart';
 import 'widgets/trip_card.dart';
@@ -19,16 +20,20 @@ class HomeView extends GetView<HomeController> {
         child: RefreshIndicator(
           onRefresh: () => controller.refreshAll(force: true),
           child: Obx(() {
-            final trips = controller.trips;
+            final trips = controller.orderedTrips;
             // Read these so Obx rebuilds on every tick and data change.
             final now = controller.now.value;
             controller.states.length;
+            controller.nearby.highlighted.length;
+            controller.nearby.reason.value;
+            final showPrompt = controller.nearby.promptVisible.value && trips.isNotEmpty;
 
             return CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(child: _header(context, now)),
                 if (controller.offline.value && trips.isNotEmpty) const SliverToBoxAdapter(child: _OfflineNote()),
+                if (showPrompt) const SliverToBoxAdapter(child: _LocationPrompt()),
                 if (trips.isEmpty)
                   SliverFillRemaining(hasScrollBody: false, child: _EmptyState(onAdd: controller.addTrip))
                 else
@@ -78,10 +83,11 @@ class _TripGroup extends GetView<HomeController> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        for (final (i, d) in trip.directions.indexed) ...[
+        for (final (i, d) in controller.directionsOf(trip).indexed) ...[
           if (i > 0) const SizedBox(height: 10),
           TripCard(
             direction: d,
+            highlight: _highlightLabel(d),
             state: controller.stateOf(d),
             next: controller.nextOf(d),
             now: now,
@@ -93,6 +99,11 @@ class _TripGroup extends GetView<HomeController> {
         ],
       ],
     );
+  }
+
+  String? _highlightLabel(TripDirection d) {
+    if (!controller.nearby.highlighted.contains(d.key)) return null;
+    return controller.nearby.reason.value == NearbyReason.learnedPlace ? 'Lo sueles mirar aquí' : 'Cerca de ti';
   }
 
   void _confirmDelete(BuildContext context) {
@@ -127,6 +138,61 @@ class _TripGroup extends GetView<HomeController> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LocationPrompt extends GetView<HomeController> {
+  const _LocationPrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppTokens.of(context);
+    final nearby = controller.nearby;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 16, 12, 8),
+        decoration: BoxDecoration(color: t.accentSoft, borderRadius: BorderRadius.circular(radius)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.near_me_rounded, size: 20, color: t.accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Destacar el trayecto según dónde estés',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: t.text)),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Usa tu ubicación aproximada para poner primero la tarjeta que te interesa. '
+                        'La ubicación no sale del móvil.',
+                        style: TextStyle(fontSize: 13, height: 1.4, color: t.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: nearby.dismissPrompt,
+                  style: TextButton.styleFrom(foregroundColor: t.muted),
+                  child: const Text('Ahora no'),
+                ),
+                TextButton(onPressed: nearby.enable, child: const Text('Activar')),
+              ],
+            ),
+          ],
         ),
       ),
     );

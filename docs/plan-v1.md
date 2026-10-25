@@ -28,6 +28,21 @@ Added in v1.1:
    incident (new id and timestamp) each time it publishes the list, so the app shows no start
    time.
 
+Added in v1.2:
+
+8. **Card by location.** With approximate location (`ACCESS_COARSE_LOCATION`, asked once
+   through an in-app card), Inicio marks the card you most likely want ("Cerca de ti") and puts
+   its trip first, that direction on top. Rules, in order:
+   - **Station rule:** the nearest saved origin within 1 km wins. If a second saved origin is
+     also within 1 km and less than 400 m farther, nothing is marked.
+   - **Learned places:** when the station rule cannot decide (far from all saved stations, or
+     between two), opening a card stores "this place → this direction". Later, within 300 m of
+     that place, that card is marked ("Lo sueles mirar aquí"). The latest choice per place
+     wins; at most 30 places are kept.
+   - Position: Android's last known position if it is under 2 minutes old (instant), then a
+     fresh low-accuracy fix with a 6 s timeout. Cards never wait for it. Nothing leaves the
+     phone. Without permission the app behaves as before.
+
 Not in v1: real-time arrivals, widget, smart ordering by time of day, walking time,
 trips with a change of line shown leg by leg (they work, but only the first leg's departures
 are shown).
@@ -85,7 +100,7 @@ lib/
   shared/                       station picking flow, section header, messages
   modules/
     shell/                      bottom bar; binding creates the three tab controllers
-    home/                       Inicio tab
+    home/                       Inicio tab; nearby_controller.dart picks the card by location
     lookup/                     Horarios tab
     incidents/                  Incidencias tab
     day_view/                   full day for one direction
