@@ -143,6 +143,11 @@ void main() {
     await tester.tap(find.byTooltip('Eliminar trayecto').first);
     await tester.pumpAndSettle();
     expect(find.text('Se eliminarán los dos sentidos del trayecto.'), findsOneWidget);
+    // The sheet must be opaque, or the bottom bar shows through it.
+    final sheet = tester.widget<Material>(
+      find.descendant(of: find.byType(BottomSheet), matching: find.byType(Material)).first,
+    );
+    expect(sheet.color, AppTokens.light.surface);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Eliminar trayecto'));
     await tester.pumpAndSettle();

@@ -108,8 +108,11 @@ class _TripGroup extends GetView<HomeController> {
 
   void _confirmDelete(BuildContext context) {
     final t = AppTokens.of(context);
-    Get.bottomSheet<void>(
-      SafeArea(
+    // Not Get.bottomSheet: it defaults to a transparent background and
+    // ignores bottomSheetTheme, so the bottom bar showed through.
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
           child: Column(
@@ -125,7 +128,7 @@ class _TripGroup extends GetView<HomeController> {
                 width: double.infinity,
                 child: FilledButton(
                   onPressed: () {
-                    Get.back<void>();
+                    Navigator.pop(sheet);
                     controller.deleteTrip(trip);
                   },
                   child: const Text('Eliminar trayecto'),
@@ -134,7 +137,7 @@ class _TripGroup extends GetView<HomeController> {
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
-                child: TextButton(onPressed: () => Get.back<void>(), child: const Text('Cancelar')),
+                child: TextButton(onPressed: () => Navigator.pop(sheet), child: const Text('Cancelar')),
               ),
             ],
           ),

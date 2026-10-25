@@ -107,3 +107,4 @@ BT=$(ls -d "$SDK"/build-tools/* | tail -1)
 | Date | Version | Notes |
 |---|---|---|
 | 2026-10-25 | 1.2.0 (3) | First publish: Inicio, Horarios, Incidencias, card by location |
+| 2026-10-25 | 1.2.1 (4) | Fix: delete confirmation sheet was transparent |

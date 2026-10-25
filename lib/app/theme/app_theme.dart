@@ -188,6 +188,7 @@ class AppTheme {
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: t.surface,
+        modalBackgroundColor: t.surface,
         surfaceTintColor: Colors.transparent,
         showDragHandle: true,
         dragHandleColor: t.faint,
