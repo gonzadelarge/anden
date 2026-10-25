@@ -19,7 +19,7 @@ class FgvApiException implements Exception {
 }
 
 /// Client for the undocumented API behind the official app.
-/// See docs/research-metrovalencia-data.md.
+/// See docs/fgv-api.md.
 class FgvApi {
   FgvApi(this._client, {DateTime Function()? now}) : _now = now ?? DateTime.now;
 

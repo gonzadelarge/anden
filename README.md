@@ -3,8 +3,8 @@
 Private Android app that shows the next Metrovalencia trains for your saved trips as soon as
 you open it. Unofficial; not linked to FGV or Metrovalencia.
 
-- Data source and API notes: [docs/research-metrovalencia-data.md](docs/research-metrovalencia-data.md)
-- Scope, design and architecture of v1: [docs/plan-v1.md](docs/plan-v1.md)
+Documentation starts at [AGENTS.md](AGENTS.md): a table that says which doc to read for each
+task.
 
 ## Run
 
