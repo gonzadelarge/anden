@@ -11,7 +11,7 @@ class Station {
   /// Internal id. Used by `horarios-online2` (timetables).
   final int id;
 
-  /// `estacion_id_FGV`. Used by `horarios-prevision-3` (real time, not in v1).
+  /// `estacion_id_FGV`. Used by `horarios-prevision-3` (real time).
   final int fgvId;
   final String name;
   final double latitude;

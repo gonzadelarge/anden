@@ -8,11 +8,13 @@ import '../../core/clock.dart';
 import '../../data/models/day_timetable.dart';
 import '../../data/models/favorite_trip.dart';
 import '../../data/repositories/favorites_repository.dart';
+import '../../data/repositories/live_train_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
+import '../../data/services/connections.dart';
 import '../../shared/messages.dart';
 
 class DayViewController extends GetxController {
-  DayViewController(TripDirection initial, this._timetables, this._favorites, this._clock)
+  DayViewController(TripDirection initial, this._timetables, this._favorites, this._clock, this.live)
       : direction = initial.obs;
 
   /// Fixed row height, so the list can jump straight to the next train.
@@ -24,10 +26,14 @@ class DayViewController extends GetxController {
   final TimetableRepository _timetables;
   final FavoritesRepository _favorites;
   final Clock _clock;
+  final LiveTrainRepository live;
 
   final Rx<TripDirection> direction;
   late final Rx<DateTime> date;
   final timetable = Rxn<DayTimetable>();
+
+  /// The day after [date]: a late first train can connect after midnight.
+  final nextDay = Rxn<DayTimetable>();
   final loading = false.obs;
   final failed = false.obs;
   final saved = false.obs;
@@ -48,6 +54,12 @@ class DayViewController extends GetxController {
     final n = now.value;
     final from = DateTime(n.year, n.month, n.day, n.hour, n.minute);
     return departures.indexWhere((t) => !t.isBefore(from));
+  }
+
+  /// The train to take at the change station for each departure.
+  Map<DateTime, Connection> get connections {
+    final departures = timetable.value?.departures ?? const <DateTime>[];
+    return live.connections(departures, [timetable.value, nextDay.value], direction.value.destinationId);
   }
 
   FavoriteTrip get _trip {
@@ -101,7 +113,9 @@ class DayViewController extends GetxController {
     final request = ++_requestId;
     final d = direction.value;
     final day = date.value;
+    final following = DateTime(day.year, day.month, day.day + 1);
     timetable.value = _timetables.cached(d.originId, d.destinationId, day);
+    nextDay.value = _timetables.cached(d.originId, d.destinationId, following);
     final hadCache = timetable.value != null;
     failed.value = false;
     loading.value = true;
@@ -113,6 +127,12 @@ class DayViewController extends GetxController {
       timetable.value = result;
       // Do not move the list again if the user is already looking at it.
       if (!hadCache) _scrollToNext();
+      final change = result.connection;
+      if (change != null) {
+        live.refresh([change.stationId]);
+        final next = await _timetables.get(d.originId, d.destinationId, following, force: force);
+        if (request == _requestId) nextDay.value = next;
+      }
     } catch (_) {
       if (request != _requestId) return;
       failed.value = timetable.value == null;

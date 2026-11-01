@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
-import '../../../core/time_format.dart';
 import '../../../data/models/favorite_trip.dart';
+import '../../../data/models/live_train.dart';
+import '../../../data/services/connections.dart';
 import '../home_controller.dart';
+import 'departures.dart';
 
 /// One direction of a saved trip with its next departures.
 class TripCard extends StatelessWidget {
@@ -13,6 +15,10 @@ class TripCard extends StatelessWidget {
     this.highlight,
     required this.state,
     required this.next,
+    this.trains = const {},
+    this.summary,
+    this.connections = const {},
+    this.transferAt,
     required this.now,
     required this.onTap,
     required this.onLongPress,
@@ -26,6 +32,10 @@ class TripCard extends StatelessWidget {
   final String? highlight;
   final DirectionState state;
   final List<DateTime> next;
+  final Map<DateTime, LiveTrain> trains;
+  final String? summary;
+  final Map<DateTime, Connection> connections;
+  final String? transferAt;
   final DateTime now;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
@@ -64,7 +74,14 @@ class TripCard extends StatelessWidget {
 
   Widget _body(BuildContext context, AppTokens t) {
     if (next.isNotEmpty) {
-      return _Departures(next: next, now: now);
+      return Departures(
+        next: next,
+        now: now,
+        trains: trains,
+        summary: summary,
+        connections: connections,
+        transferAt: transferAt,
+      );
     }
     if (state.loading && !state.hasData) {
       return SizedBox(
@@ -162,88 +179,6 @@ class _RouteLine extends StatelessWidget {
           icon: Icon(Icons.close_rounded, size: 18, color: t.faint),
         ),
       ],
-    );
-  }
-}
-
-class _Departures extends StatelessWidget {
-  const _Departures({required this.next, required this.now});
-
-  final List<DateTime> next;
-  final DateTime now;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTokens.of(context);
-    final first = next.first;
-    final later = next.skip(1);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              formatTime(first),
-              style: TextStyle(
-                fontSize: 44,
-                fontWeight: FontWeight.w600,
-                height: 1,
-                letterSpacing: -1.2,
-                color: t.text,
-                fontFeatures: tabular,
-              ),
-            ),
-            if (isAfterToday(first, now)) ...[
-              const SizedBox(width: 10),
-              _Tag(label: 'mañana', color: t.muted, background: t.background),
-            ],
-            const Spacer(),
-            _Tag(label: formatUntil(first, now), color: t.accent, background: t.accentSoft),
-          ],
-        ),
-        if (later.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Text('Después', style: TextStyle(fontSize: 13, color: t.faint)),
-              for (final time in later) ...[
-                const SizedBox(width: 16),
-                Text(
-                  formatTime(time),
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w500, color: t.muted, fontFeatures: tabular),
-                ),
-                if (isAfterToday(time, now) && !isAfterToday(first, now))
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Text('mañana', style: TextStyle(fontSize: 12, color: t.faint)),
-                  ),
-              ],
-            ],
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag({required this.label, required this.color, required this.background});
-
-  final String label;
-  final Color color;
-  final Color background;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999)),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular),
-      ),
     );
   }
 }

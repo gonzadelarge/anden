@@ -4,6 +4,8 @@ import 'package:get/get.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/time_format.dart';
 import '../../data/models/day_timetable.dart';
+import '../../data/services/connections.dart';
+import '../../shared/connection_label.dart';
 import 'day_view_controller.dart';
 
 class DayViewView extends GetView<DayViewController> {
@@ -97,6 +99,10 @@ class DayViewView extends GetView<DayViewController> {
     final now = controller.now.value;
     final isToday = controller.isToday;
     final nextIndex = isToday ? controller.nextIndex : 0;
+    // Read this so Obx rebuilds when the real-time lines arrive.
+    controller.live.revision.value;
+    controller.nextDay.value;
+    final connections = controller.connections;
 
     if (timetable == null) {
       if (controller.failed.value) {
@@ -124,6 +130,7 @@ class DayViewView extends GetView<DayViewController> {
           final past = isToday && (nextIndex == -1 || i < nextIndex);
           return _Row(
             time: time,
+            connection: connections[time],
             now: now,
             past: past,
             isNext: isToday && i == nextIndex,
@@ -199,8 +206,12 @@ class _Summary extends StatelessWidget {
           ],
           if (tt != null && tt.legs > 1) ...[
             const SizedBox(height: 4),
-            Text('Con transbordo. Se muestran las salidas del primer tramo.',
-                style: TextStyle(fontSize: 13, color: t.muted)),
+            Text(
+              tt.connection == null
+                  ? 'Con transbordo.'
+                  : 'Transbordo en ${tt.connection!.stationName}. Cada fila indica el tren siguiente.',
+              style: TextStyle(fontSize: 13, color: t.muted),
+            ),
           ],
         ],
       ),
@@ -211,6 +222,7 @@ class _Summary extends StatelessWidget {
 class _Row extends StatelessWidget {
   const _Row({
     required this.time,
+    this.connection,
     required this.now,
     required this.past,
     required this.isNext,
@@ -218,6 +230,9 @@ class _Row extends StatelessWidget {
   });
 
   final DateTime time;
+
+  /// The train to take at the change station.
+  final Connection? connection;
   final DateTime now;
   final bool past;
   final bool isNext;
@@ -250,7 +265,18 @@ class _Row extends StatelessWidget {
                 fontFeatures: tabular,
               ),
             ),
-            const Spacer(),
+            if (connection != null)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Opacity(
+                    opacity: past ? 0.6 : 1,
+                    child: ConnectionLabel(connection: connection!, maxLines: 2, fontSize: 14),
+                  ),
+                ),
+              )
+            else
+              const Spacer(),
             if (showUntil)
               Text(
                 formatUntil(time, now),

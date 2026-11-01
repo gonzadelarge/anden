@@ -23,7 +23,9 @@ class LineRepository {
   Future<List<Line>> getLines() async {
     final entry = _store.read<Map<String, dynamic>>(_key);
     final fetchedAt = entry == null ? null : DateTime.parse(entry['fetchedAt'] as String);
-    if (fetchedAt != null && _clock.now().difference(fetchedAt) < maxAge) return cached();
+    // Lists saved by older versions have no stops, so they count as old.
+    final complete = cached().any((l) => l.stops.isNotEmpty);
+    if (complete && fetchedAt != null && _clock.now().difference(fetchedAt) < maxAge) return cached();
 
     try {
       final lines = await _api.fetchLines();

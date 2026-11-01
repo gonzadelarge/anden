@@ -28,5 +28,7 @@ Light and dark follow the system. Android launch background and launcher icon co
 - Bottom sheets: `showModalBottomSheet` (themed). Messages: `showMessage()`.
 - Edge to edge: screens without an `AppBar` use `SafeArea`; lists add
   `MediaQuery.paddingOf(context).bottom`.
+- Floating buttons of Inicio: "Llévame a casa" uses `accent` / `onAccent`; the small star and the
+  favourite stations use `surface` with a 1 px `border`. Lists keep 96 px of bottom space.
 - Launcher icon: three timetable rows, first one with an accent dot
   (`res/drawable/ic_launcher_foreground.xml`, monochrome variant for themed icons).

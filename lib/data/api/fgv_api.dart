@@ -6,6 +6,7 @@ import '../../core/time_format.dart';
 import '../models/day_timetable.dart';
 import '../models/incident.dart';
 import '../models/line.dart';
+import '../models/live_train.dart';
 import '../models/station.dart';
 
 class FgvApiException implements Exception {
@@ -61,25 +62,52 @@ class FgvApi {
 
   /// [originId] and [destinationId] are [Station.id], not [Station.fgvId].
   Future<DayTimetable> fetchTimetable(int originId, int destinationId, DateTime date) async {
-    final body = await _send(() => _client.post(
-          baseUrl.resolve('horarios-online2'),
-          headers: {..._headers, 'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'estacion_origen_id': originId,
-            'estacion_destino_id': destinationId,
-            'fecha': formatApiDate(date),
-          }),
-        ));
+    final body = await _postTimetable(originId, destinationId, date);
     if (body is! Map<String, dynamic>) {
       throw FgvApiException('Unexpected timetable body');
     }
-    return DayTimetable.fromApi(
+    final timetable = DayTimetable.fromApi(
       body,
       originId: originId,
       destinationId: destinationId,
       date: date,
       fetchedAt: _now(),
     );
+    final connection = timetable.connection;
+    if (connection == null) return timetable;
+    return timetable.withRideMinutes(await _rideMinutes(originId, connection.stationId, date));
+  }
+
+  /// The API gives only the total of a trip with a change, wait included, so
+  /// the first leg is asked for as a trip of its own.
+  Future<int?> _rideMinutes(int originId, int changeStationId, DateTime date) async {
+    try {
+      final body = await _postTimetable(originId, changeStationId, date);
+      final results = (body as Map<String, dynamic>)['resultado'] as List;
+      return ((results.first as Map<String, dynamic>)['duracion_minutos'] as num?)?.toInt();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<dynamic> _postTimetable(int originId, int destinationId, DateTime date) => _send(() => _client.post(
+        baseUrl.resolve('horarios-online2'),
+        headers: {..._headers, 'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'estacion_origen_id': originId,
+          'estacion_destino_id': destinationId,
+          'fecha': formatApiDate(date),
+        }),
+      ));
+
+  /// [fgvId] is [Station.fgvId], not [Station.id].
+  Future<List<LiveTrain>> fetchLiveTrains(int fgvId) async {
+    final body = await _send(() => _client.get(baseUrl.resolve('horarios-prevision-3/$fgvId'), headers: _headers));
+    try {
+      return LiveTrain.listFromApi(body as Map<String, dynamic>, _now());
+    } on TypeError {
+      throw FgvApiException('Unexpected real-time body');
+    }
   }
 
   Future<dynamic> _send(Future<http.Response> Function() request) async {

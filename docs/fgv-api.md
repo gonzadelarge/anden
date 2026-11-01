@@ -13,12 +13,12 @@ Browsers are blocked by CORS (only FGV domains allowed); native apps are fine.
 | Call | Returns | Notes |
 |---|---|---|
 | `GET estaciones` | 144 stations | keep `sede == "V"`, `deleted_at == null` |
-| `GET lineas` | 10 lines (L1–L10) | `id` 42–50, 57 = internal; `linea_id_FGV` = public number |
+| `GET lineas` | 10 lines (L1–L10) | `id` 42–50, 57 = internal; `linea_id_FGV` = public number; `stops` = `"107,80,…"` of `estacion_id_FGV` |
+| `GET horarios-prevision-3/{estacion_id_FGV}` | real-time trains at a station | see below |
 | `POST horarios-online2` | one day's timetable between two stations | see below |
 | `GET incidencias` | current incidents | see below |
 
-Not used yet: `GET horarios-prevision-3/{estacion_id_FGV}` (real-time arrivals, `seconds`
-until each train), `GET tarjetas-transporte/{id}`.
+Not used yet: `GET tarjetas-transporte/{id}`.
 
 ## Station ids — three schemes
 
@@ -41,10 +41,23 @@ until each train), `GET tarjetas-transporte/{id}`.
 - Answer: `resultado[0]` = first alternative; `transbordos[]` = legs (more than one = change
   of line); each leg has `destinos[]` and `horas: {"08": ["08:01", …], …}`.
 - `horas` can be `[]` instead of `{}` for a day without service.
+- Change of line: each `transbordos[]` leg has its own `horas` and `destinos`, and
+  `estacion_origen_transbordo.id` is a `Station.id`. `duracion_minutos` is the total **with the
+  wait** (Sant Isidre -> Riba-roja: 52 min; legs alone: 8 + 29), so the ride of the first leg
+  needs one more call, origin -> change station.
 - Hour `"00"` entries belong to the requested date (night service). Sort the times; don't
   trust key order.
-- No line or destination per departure; only the list of destinations for the leg.
+- No line or destination per departure; only the list of destinations for the leg. `lineas` in
+  the leg came back empty (checked 2026-11-01).
 - Weekday, Saturday, Sunday and night service are handled by the date.
+
+## `horarios-prevision-3`
+
+`previsiones[]` has `line` (public number) and `trains[]` with `destino` and `seconds`. It is the
+only source of line and destination per train. It holds about 8 trains **for all directions and
+lines together**, so it reaches about 40 min at Amistat and only about 20 min at Colón. Estimates
+were under 1 min from the timetable when compared on 2026-11-01. No id links a train to a
+timetable time: `data/services/train_match.dart` matches by destination and time (3 min).
 
 ## `incidencias`
 

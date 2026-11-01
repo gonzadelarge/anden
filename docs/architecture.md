@@ -16,7 +16,7 @@ data/storage/local_store.dart  ── LocalStore interface (GetStorageStore / Me
 ```
 
 `data/services/` holds pure logic with no Flutter (`next_departures.dart`,
-`nearby_direction.dart`) plus `location_service.dart` (wraps `geolocator`). `core/` is pure
+`nearby_direction.dart`, `nearby_stations.dart`, `train_match.dart`) plus `location_service.dart` (wraps `geolocator`). `core/` is pure
 helpers. Pure code takes a `Clock` so tests can fix "now".
 
 ## Dependency injection
@@ -24,8 +24,8 @@ helpers. Pure code takes a `Clock` so tests can fix "now".
 - `app/bindings/initial_binding.dart`: app-wide singletons (`permanent: true`): `Clock`,
   `LocalStore`, `FgvApi`, all repositories, `LocationService`.
 - `modules/shell/shell_binding.dart`: the shell route creates the tab controllers
-  (`ShellController`, `NearbyController`, `HomeController`, `LookupController`,
-  `IncidentsController`). The tabs live in an `IndexedStack`, so they stay alive.
+  (`ShellController`, `NearbyController`, `HomeController`, `GoToController`,
+  `LookupController`, `IncidentsController`). The tabs live in an `IndexedStack`, so they stay alive.
 - `day_view` has its own binding (argument: `TripDirection`).
 - `station_picker` has **no binding**: `StationPickerView` is a `StatefulWidget` that creates
   and disposes its own controller, because the picker is pushed twice in a row
@@ -44,6 +44,12 @@ Routes: `app/routes/app_routes.dart` (`/`, `/day`, `/station`).
 | `favorites` | saved trips | `FavoritesRepository.revision` (RxInt) goes up on every change |
 | `learned_places` | location → direction | max 30, latest choice per 300 m wins |
 | `location_prompt` | `accepted` / `declined` | in-app location card shown once |
+| `home_station` | station marked as casa | until changed |
+| `favorite_stations` | favourite stations, max 3 | until changed |
+| `precise_prompt` | `true` | upgrade to precise location asked once |
+
+Real-time trains are not stored: `LiveTrainRepository` keeps them in memory and downloads a
+station again after 60 s, while the app is in the foreground.
 
 `TimetableRepository.get()` **throws** when offline; callers keep the cached copy on screen and
 set their own offline flag.

@@ -108,3 +108,4 @@ BT=$(ls -d "$SDK"/build-tools/* | tail -1)
 |---|---|---|
 | 2026-10-25 | 1.2.0 (3) | First publish: Inicio, Horarios, Incidencias, card by location |
 | 2026-10-25 | 1.2.1 (4) | Fix: delete confirmation sheet was transparent |
+| 2026-11-01 | 1.3.0 (5) | Line and destination on cards, "Llévame a casa", favourite stations, change origin. New permission: precise location |

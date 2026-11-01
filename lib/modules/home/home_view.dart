@@ -8,6 +8,7 @@ import '../../data/models/favorite_trip.dart';
 import '../../data/services/nearby_direction.dart';
 import '../../shared/section_header.dart';
 import 'home_controller.dart';
+import 'widgets/go_to.dart';
 import 'widgets/trip_card.dart';
 
 class HomeView extends GetView<HomeController> {
@@ -16,6 +17,7 @@ class HomeView extends GetView<HomeController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: const GoToButtons(),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () => controller.refreshAll(force: true),
@@ -26,6 +28,7 @@ class HomeView extends GetView<HomeController> {
             controller.states.length;
             controller.nearby.highlighted.length;
             controller.nearby.reason.value;
+            controller.live.revision.value;
             final showPrompt = controller.nearby.promptVisible.value && trips.isNotEmpty;
 
             return CustomScrollView(
@@ -38,7 +41,8 @@ class HomeView extends GetView<HomeController> {
                   SliverFillRemaining(hasScrollBody: false, child: _EmptyState(onAdd: controller.addTrip))
                 else
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                    // Bottom space so the floating button does not cover the last card.
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                     sliver: SliverList.separated(
                       itemCount: trips.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 28),
@@ -90,6 +94,10 @@ class _TripGroup extends GetView<HomeController> {
             highlight: _highlightLabel(d),
             state: controller.stateOf(d),
             next: controller.nextOf(d),
+            trains: controller.trainsOf(d, controller.nextOf(d)),
+            summary: controller.summaryOf(d),
+            connections: controller.connectionsOf(d, controller.nextOf(d)),
+            transferAt: controller.transferAtOf(d),
             now: now,
             onTap: () => controller.openDay(d),
             onLongPress: () => _confirmDelete(context),

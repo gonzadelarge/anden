@@ -7,9 +7,13 @@ import '../../app/routes/app_routes.dart';
 import '../../core/clock.dart';
 import '../../data/models/day_timetable.dart';
 import '../../data/models/favorite_trip.dart';
+import '../../data/models/live_train.dart';
 import '../../data/repositories/favorites_repository.dart';
+import '../../data/repositories/live_train_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
+import '../../data/services/connections.dart';
 import '../../data/services/next_departures.dart';
+import '../../data/services/train_match.dart';
 import '../../shared/messages.dart';
 import '../../shared/pick_station.dart';
 import 'nearby_controller.dart';
@@ -29,7 +33,7 @@ class DirectionState {
 }
 
 class HomeController extends GetxController with WidgetsBindingObserver {
-  HomeController(this._favorites, this._timetables, this._clock, this.nearby);
+  HomeController(this._favorites, this._timetables, this._clock, this.nearby, this.live);
 
   static const tickInterval = Duration(seconds: 20);
 
@@ -37,6 +41,7 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   final TimetableRepository _timetables;
   final Clock _clock;
   final NearbyController nearby;
+  final LiveTrainRepository live;
 
   final trips = <FavoriteTrip>[].obs;
   final states = <String, DirectionState>{}.obs;
@@ -110,10 +115,41 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     return nextDepartures([s.today, s.tomorrow], now.value, count: count);
   }
 
+  /// Line and destination of the departures that matched a real-time train.
+  Map<DateTime, LiveTrain> trainsOf(TripDirection d, List<DateTime> departures) =>
+      matchLiveTrains(departures, live.at(d.originId), _destinationsOf(d));
+
+  /// "L5, L7 hacia Aeroport", for when no departure matched a real-time train.
+  String? summaryOf(TripDirection d) {
+    final s = stateOf(d);
+    return routeSummary(live.firstLegLines([s.today, s.tomorrow], d.originId, d.destinationId), _destinationsOf(d));
+  }
+
+  /// The train to take at the change station, for trips with a change of line.
+  Map<DateTime, Connection> connectionsOf(TripDirection d, List<DateTime> departures) {
+    final s = stateOf(d);
+    return live.connections(departures, [s.today, s.tomorrow], d.destinationId);
+  }
+
+  /// Name of the change station, if the trip has one.
+  String? transferAtOf(TripDirection d) {
+    final s = stateOf(d);
+    return (s.today?.connection ?? s.tomorrow?.connection)?.stationName;
+  }
+
+  List<String> _destinationsOf(TripDirection d) {
+    final s = stateOf(d);
+    return {...?s.today?.destinations, ...?s.tomorrow?.destinations}.toList();
+  }
+
   /// Fresh cache entries are not downloaded again unless [force] is true.
   Future<void> refreshAll({bool force = false}) async {
     final directions = trips.expand((t) => t.directions).toList();
+    final labels = _refreshLive(force: force);
     final results = await Future.wait(directions.map((d) => _refresh(d, force: force)));
+    await labels;
+    // The change stations are known only now. Recent stations are not asked again.
+    await _refreshLive();
     offline.value = results.contains(false);
   }
 
@@ -143,11 +179,23 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     for (final d in added) {
       _refresh(d, force: false);
     }
+    _refreshLive();
     nearby.reevaluate(_directions);
+  }
+
+  Future<void> _refreshLive({bool force = false}) {
+    final changes = _directions.map((d) {
+      final s = stateOf(d);
+      return (s.today?.connection ?? s.tomorrow?.connection)?.stationId;
+    }).nonNulls;
+    return live.refresh([..._directions.map((d) => d.originId), ...changes], force: force);
   }
 
   void _tick() {
     now.value = _clock.now();
+    // The timer can keep running in the background; do not use data there.
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle == null || lifecycle == AppLifecycleState.resumed) _refreshLive();
     if (_today != _serviceDay) {
       _serviceDay = _today;
       _loadFromCache();

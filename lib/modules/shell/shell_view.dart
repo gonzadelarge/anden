@@ -26,8 +26,8 @@ class ShellView extends GetView<ShellController> {
           onDestinationSelected: controller.select,
           destinations: [
             const NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
+              icon: Icon(Icons.train_outlined),
+              selectedIcon: Icon(Icons.train_rounded),
               label: 'Inicio',
             ),
             const NavigationDestination(

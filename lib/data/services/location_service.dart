@@ -14,8 +14,12 @@ abstract class LocationService {
   /// Position Android already has, if it is not older than [maxAge]. Instant.
   Future<GeoPoint?> lastKnown({required Duration maxAge});
 
-  /// Fresh low-accuracy position (WiFi / cell). Null after [timeout].
-  Future<GeoPoint?> current({required Duration timeout});
+  /// Fresh position, low accuracy (WiFi / cell) unless [precise]. Null after
+  /// [timeout].
+  Future<GeoPoint?> current({required Duration timeout, bool precise = false});
+
+  /// Shows the system dialog if the user gave only approximate access.
+  Future<void> upgradeToPrecise();
 }
 
 class GeolocatorLocationService implements LocationService {
@@ -47,14 +51,25 @@ class GeolocatorLocationService implements LocationService {
   }
 
   @override
-  Future<GeoPoint?> current({required Duration timeout}) async {
+  Future<GeoPoint?> current({required Duration timeout, bool precise = false}) async {
     try {
       final p = await Geolocator.getCurrentPosition(
-        locationSettings: LocationSettings(accuracy: LocationAccuracy.low, timeLimit: timeout),
+        locationSettings: LocationSettings(accuracy: precise ? LocationAccuracy.high : LocationAccuracy.low, timeLimit: timeout),
       );
       return GeoPoint(p.latitude, p.longitude);
     } catch (_) {
       return null;
+    }
+  }
+
+  @override
+  Future<void> upgradeToPrecise() async {
+    try {
+      if (await Geolocator.getLocationAccuracy() == LocationAccuracyStatus.reduced) {
+        await Geolocator.requestPermission();
+      }
+    } catch (_) {
+      // Approximate still works.
     }
   }
 }

@@ -27,7 +27,7 @@ class TimetableRepository {
   /// [cached] in that case and tell the user they are offline.
   Future<DayTimetable> get(int originId, int destinationId, DateTime date, {bool force = false}) async {
     final old = cached(originId, destinationId, date);
-    if (!force && old != null && _clock.now().difference(old.fetchedAt) < maxAge) return old;
+    if (!force && old != null && old.complete && _clock.now().difference(old.fetchedAt) < maxAge) return old;
 
     final fresh = await _api.fetchTimetable(originId, destinationId, date);
     await _store.write(_key(originId, destinationId, date), fresh.toJson());

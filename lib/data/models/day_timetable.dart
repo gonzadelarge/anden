@@ -1,6 +1,36 @@
 import '../../core/clock.dart';
 import '../../core/time_format.dart';
 
+/// The second train of a trip with a change of line.
+class ConnectionLeg {
+  const ConnectionLeg({
+    required this.stationId,
+    required this.stationName,
+    required this.rideMinutes,
+    required this.departures,
+    required this.destinations,
+  });
+
+  /// The change station ([Station.id]).
+  final int stationId;
+  final String stationName;
+
+  /// Minutes on the first train. Null when it could not be downloaded.
+  final int? rideMinutes;
+
+  /// Departures from the change station on the same service date.
+  final List<DateTime> departures;
+  final List<String> destinations;
+
+  Map<String, dynamic> toJson() => {
+        'stationId': stationId,
+        'stationName': stationName,
+        'rideMinutes': rideMinutes,
+        'departures': departures.map(formatTime).toList(),
+        'destinations': destinations,
+      };
+}
+
 /// All departures from one station to another on one service date.
 class DayTimetable {
   const DayTimetable({
@@ -12,6 +42,7 @@ class DayTimetable {
     this.durationMinutes,
     this.legs = 1,
     this.destinations = const [],
+    this.connection,
   });
 
   final int originId;
@@ -32,6 +63,35 @@ class DayTimetable {
 
   /// Final destinations of the trains that serve this trip.
   final List<String> destinations;
+
+  /// Second train when [legs] is more than 1. A third train, if any, is not kept.
+  final ConnectionLeg? connection;
+
+  /// False when a change of line lacks data: a cached copy is downloaded again.
+  bool get complete => legs <= 1 || connection?.rideMinutes != null;
+
+  DayTimetable withRideMinutes(int? minutes) {
+    final leg = connection;
+    return DayTimetable(
+      originId: originId,
+      destinationId: destinationId,
+      date: date,
+      departures: departures,
+      fetchedAt: fetchedAt,
+      durationMinutes: durationMinutes,
+      legs: legs,
+      destinations: destinations,
+      connection: leg == null
+          ? null
+          : ConnectionLeg(
+              stationId: leg.stationId,
+              stationName: leg.stationName,
+              rideMinutes: minutes,
+              departures: leg.departures,
+              destinations: leg.destinations,
+            ),
+    );
+  }
 
   /// Parses the body of `POST horarios-online2`.
   factory DayTimetable.fromApi(
@@ -56,17 +116,7 @@ class DayTimetable {
     final legs = (first['transbordos'] as List?) ?? const [];
     final firstLeg = legs.isEmpty ? const <String, dynamic>{} : legs.first as Map<String, dynamic>;
 
-    final departures = <DateTime>[];
-    final hours = firstLeg['horas'];
-    // An empty day comes back as [] instead of {}.
-    if (hours is Map) {
-      for (final times in hours.values) {
-        for (final value in times as List) {
-          departures.add(_atTime(day, value as String));
-        }
-      }
-    }
-    departures.sort();
+    final departures = _parseHours(firstLeg['horas'], day);
 
     return DayTimetable(
       originId: originId,
@@ -77,11 +127,37 @@ class DayTimetable {
       durationMinutes: (first['duracion_minutos'] as num?)?.toInt(),
       legs: legs.isEmpty ? 1 : legs.length,
       destinations: ((firstLeg['destinos'] as List?) ?? const []).cast<String>(),
+      connection: legs.length > 1 ? _parseConnection(legs[1] as Map<String, dynamic>, day) : null,
     );
+  }
+
+  static ConnectionLeg _parseConnection(Map<String, dynamic> leg, DateTime day) {
+    final station = leg['estacion_origen_transbordo'] as Map<String, dynamic>;
+    return ConnectionLeg(
+      stationId: station['id'] as int,
+      stationName: (station['nombre'] as String).trim(),
+      rideMinutes: null,
+      departures: _parseHours(leg['horas'], day),
+      destinations: ((leg['destinos'] as List?) ?? const []).cast<String>(),
+    );
+  }
+
+  static List<DateTime> _parseHours(Object? hours, DateTime day) {
+    final departures = <DateTime>[];
+    // An empty day comes back as [] instead of {}.
+    if (hours is Map) {
+      for (final times in hours.values) {
+        for (final value in times as List) {
+          departures.add(_atTime(day, value as String));
+        }
+      }
+    }
+    return departures..sort();
   }
 
   factory DayTimetable.fromJson(Map<String, dynamic> json) {
     final day = parseDateKey(json['date'] as String);
+    final leg = json['connection'] as Map?;
     return DayTimetable(
       originId: json['originId'] as int,
       destinationId: json['destinationId'] as int,
@@ -91,6 +167,15 @@ class DayTimetable {
       durationMinutes: json['durationMinutes'] as int?,
       legs: json['legs'] as int? ?? 1,
       destinations: ((json['destinations'] as List?) ?? const []).cast<String>(),
+      connection: leg == null
+          ? null
+          : ConnectionLeg(
+              stationId: leg['stationId'] as int,
+              stationName: leg['stationName'] as String,
+              rideMinutes: leg['rideMinutes'] as int?,
+              departures: (leg['departures'] as List).map((t) => _atTime(day, t as String)).toList(),
+              destinations: (leg['destinations'] as List).cast<String>(),
+            ),
     );
   }
 
@@ -103,6 +188,7 @@ class DayTimetable {
         'durationMinutes': durationMinutes,
         'legs': legs,
         'destinations': destinations,
+        'connection': connection?.toJson(),
       };
 
   static DateTime _atTime(DateTime day, String hhmm) {
