@@ -15,6 +15,7 @@ UI strings are Spanish.
 | What a screen does, card highlight by location, empty/error states | [docs/behaviour.md](docs/behaviour.md) | |
 | Calling the FGV API, station ids, response shapes, API errors | [docs/fgv-api.md](docs/fgv-api.md) | archive |
 | **New screen or visual change** (colours, cards, typography) | [docs/design.md](docs/design.md) | |
+| Timetable server on the VPS (planned: GTFS, fallback when FGV is down), testers, a public release | [../anden_server/AGENTS.md](../anden_server/AGENTS.md) | app docs, unless the task also changes the app |
 | **Release / publish a new APK to the phones** | skill `/release-app` → [docs/publishing-homepi.md](docs/publishing-homepi.md) | everything else |
 | Why a past decision was made (why this API, original plan) | [docs/archive/](docs/archive/) | historical only, **not** current |
 

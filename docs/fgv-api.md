@@ -22,11 +22,14 @@ Not used yet: `GET tarjetas-transporte/{id}`.
 
 ## Station ids — three schemes
 
-| Station | `id` (timetables) | `estacion_id_FGV` (real time) | website form |
+| Station | `id` (timetables) | `estacion_id_FGV` (real time) | website form = GTFS `stop_id` |
 |---|---|---|---|
 | Àngel Guimerà | 554 | 17 | 25 |
 | Colón | 552 | 15 | 70 |
-| Amistat | 560 | 23 | – |
+| Amistat | 560 | 23 | 121 |
+
+The website form id is also the `stop_id` of the official GTFS feed, which the planned
+timetable server uses: [../../anden_server/docs/gtfs.md](../../anden_server/docs/gtfs.md).
 
 `Station.id` = `id`, `Station.fgvId` = `estacion_id_FGV`. A wrong id returns
 `422 "The selected estacion origen id is invalid."` or, worse, another station.

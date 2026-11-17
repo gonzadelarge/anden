@@ -54,6 +54,9 @@ station again after 60 s, while the app is in the foreground.
 `TimetableRepository.get()` **throws** when offline; callers keep the cached copy on screen and
 set their own offline flag.
 
+Planned, not built: timetables first from the own server on the VPS, then FGV, then this cache.
+Real time stays on FGV. Plan: [../../anden_server/docs/plan.md](../../anden_server/docs/plan.md#9-changes-in-the-andén-app).
+
 ## Data flow on Inicio
 
 1. First frame uses only the cache. The network never blocks it.
