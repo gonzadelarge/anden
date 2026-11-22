@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Own timetable server: URL and token for the build (scripts/publish-homepi.sh). Never commit.
+/config/anden_server.json

@@ -29,7 +29,12 @@ The hub reads that folder on every request, so it needs no restart or rebuild.
    flutter test
    ```
 
-3. **Build and publish** (Git Bash, from the project folder):
+3. **Own server settings:** `config/anden_server.json` must exist (gitignored; template
+   `config/anden_server.example.json`). It holds `ANDEN_URL` and `ANDEN_TOKEN`; the token is the
+   one in `/etc/anden/env` on the VPS. Without the file the script warns and builds an APK that
+   asks FGV only.
+
+4. **Build and publish** (Git Bash, from the project folder):
 
    ```sh
    scripts/publish-homepi.sh
@@ -38,9 +43,9 @@ The hub reads that folder on every request, so it needs no restart or rebuild.
    The script builds the release APK, copies it, renames it and checks that the file on the hub
    matches the local build. Use `--no-build` to publish the APK you already built.
 
-4. **Install:** on each phone, open HomePi → Settings → Apps and update Andén.
+5. **Install:** on each phone, open HomePi → Settings → Apps and update Andén.
 
-5. **Commit** the version change.
+6. **Commit** the version change.
 
 ## What the script does
 
@@ -110,3 +115,4 @@ BT=$(ls -d "$SDK"/build-tools/* | tail -1)
 | 2026-10-25 | 1.2.1 (4) | Fix: delete confirmation sheet was transparent |
 | 2026-11-01 | 1.3.0 (5) | Line and destination on cards, "Llévame a casa", favourite stations, change origin. New permission: precise location |
 | 2026-11-01 | 1.4.0 (6) | Connecting train on cards and day view for trips with a change (1 min margin), house-only floating button, train icon for Inicio |
+| 2026-11-22 | 1.5.0 (7) | Timetables first from the own server (anden.gonzadelarge.com), FGV and cache as fallbacks; change trips ask FGV first; 2 min change margin |

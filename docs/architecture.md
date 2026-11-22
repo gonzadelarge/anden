@@ -11,6 +11,7 @@ modules/  (views + GetX controllers)
    │ uses
 data/repositories  ── cache policy, one per data type
    │ uses
+data/api/anden_server_api.dart  ── own server on the VPS, throws AndenServerException
 data/api/fgv_api.dart  ── HTTP only, throws FgvApiException
 data/storage/local_store.dart  ── LocalStore interface (GetStorageStore / MemoryStore)
 ```
@@ -22,7 +23,8 @@ helpers. Pure code takes a `Clock` so tests can fix "now".
 ## Dependency injection
 
 - `app/bindings/initial_binding.dart`: app-wide singletons (`permanent: true`): `Clock`,
-  `LocalStore`, `FgvApi`, all repositories, `LocationService`.
+  `LocalStore`, `FgvApi`, all repositories, `LocationService`. `AndenServerApi` is passed only to
+  `TimetableRepository`.
 - `modules/shell/shell_binding.dart`: the shell route creates the tab controllers
   (`ShellController`, `NearbyController`, `HomeController`, `GoToController`,
   `LookupController`, `IncidentsController`). The tabs live in an `IndexedStack`, so they stay alive.
@@ -54,8 +56,29 @@ station again after 60 s, while the app is in the foreground.
 `TimetableRepository.get()` **throws** when offline; callers keep the cached copy on screen and
 set their own offline flag.
 
-Planned, not built: timetables first from the own server on the VPS, then FGV, then this cache.
-Real time stays on FGV. Plan: [../../anden_server/docs/plan.md](../../anden_server/docs/plan.md#9-changes-in-the-andén-app).
+### Timetable sources
+
+`TimetableRepository` downloads a day from, in order:
+
+1. the own server `https://anden.gonzadelarge.com` (`AndenServerApi`, 5 s timeout);
+2. FGV `horarios-online2` (25 s);
+3. nothing: `get()` throws and callers keep the cache.
+
+**Trips with a change of line** go the other way: FGV first, the server only when FGV fails.
+FGV picks the change station by rules the server copies only in part
+([../../anden_server/docs/fgv-routing.md](../../anden_server/docs/fgv-routing.md)). The
+repository knows a pair needs a change from the cached day (`legs` 2) or, the first time, from
+the server's answer; then it asks FGV and keeps the server's answer only if FGV fails.
+
+Any server error (`no_route`, `date_not_covered`, `unknown_station`, network, 5 s timeout) means
+"ask FGV". The server's answer has the cache's shape, so it is stored under the same `tt:` key.
+Its `rideMinutes` is the usual first-leg ride, so no second request is needed.
+
+The server is on only when the build passes `ANDEN_URL` and `ANDEN_TOKEN`
+(`--dart-define-from-file=config/anden_server.json`, see
+[publishing-homepi.md](publishing-homepi.md)). `flutter run` and `flutter test` without them
+ask FGV only. Real time, incidents, stations and lines stay on FGV. Server plan:
+[../../anden_server/docs/plan.md](../../anden_server/docs/plan.md#9-changes-in-the-andén-app).
 
 ## Data flow on Inicio
 
@@ -72,6 +95,7 @@ Real time stays on FGV. Plan: [../../anden_server/docs/plan.md](../../anden_serv
 |---|---|
 | Offline, cache present | Show cache + "Sin conexión" note |
 | Offline, no cache | Card shows retry action |
+| Own server down or slow | After 5 s the repository asks FGV |
 | API slow (seen up to 17.7 s) | `FgvApi.timeout` = 25 s; cache stays on screen |
 | Unexpected JSON | `FgvApiException`; one card fails, the rest work |
 

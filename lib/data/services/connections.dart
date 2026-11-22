@@ -2,8 +2,10 @@ import '../models/day_timetable.dart';
 import '../models/live_train.dart';
 import 'train_match.dart';
 
-/// Time to get off one train and reach the other platform. The stations are small.
-const transferMargin = Duration(minutes: 1);
+/// Time to get off one train and reach the other platform. FGV uses 2 min after each
+/// train's own arrival (anden_server docs/fgv-routing.md, rule 3); the app adds it to the
+/// usual ride, so it matches FGV's connection in most cases.
+const transferMargin = Duration(minutes: 2);
 
 /// The train to take at the change station.
 class Connection {

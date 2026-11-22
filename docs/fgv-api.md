@@ -20,6 +20,10 @@ Browsers are blocked by CORS (only FGV domains allowed); native apps are fine.
 
 Not used yet: `GET tarjetas-transporte/{id}`.
 
+`horarios-online2` is now the second source for timetables, after the own server on the VPS,
+and the first one for trips with a change of line ([architecture.md](architecture.md#timetable-sources)).
+The other calls go only to FGV.
+
 ## Station ids — three schemes
 
 | Station | `id` (timetables) | `estacion_id_FGV` (real time) | website form = GTFS `stop_id` |

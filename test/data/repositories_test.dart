@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anden/core/clock.dart';
+import 'package:anden/data/api/anden_server_api.dart';
 import 'package:anden/data/api/fgv_api.dart';
 import 'package:anden/data/models/favorite_trip.dart';
 import 'package:anden/data/repositories/favorites_repository.dart';
@@ -89,6 +90,139 @@ void main() {
 
       expect(repo.cached(560, 552, DateTime(2026, 10, 26)), isNull);
       expect(repo.cached(560, 552, DateTime(2026, 10, 27)), isNotNull);
+    });
+  });
+
+  group('TimetableRepository with the own server', () {
+    // What the server sends (anden_server docs/plan.md, section 6).
+    Map<String, dynamic> serverBody({int legs = 1}) => {
+          'originId': 560,
+          'destinationId': 552,
+          'date': '2026-10-27',
+          'departures': ['05:49', '06:11'],
+          'durationMinutes': 5,
+          'legs': legs,
+          'destinations': ['Aeroport'],
+          'connection': legs == 1
+              ? null
+              : {
+                  'stationId': 554,
+                  'stationName': 'Àngel Guimerà',
+                  'rideMinutes': 8,
+                  'departures': ['06:05'],
+                  'destinations': ['Riba-roja de Túria'],
+                },
+          'feedDate': '2026-10-26',
+        };
+
+    late int serverStatus;
+    late Map<String, dynamic> serverAnswer;
+
+    TimetableRepository repo({String url = 'https://anden.example.com'}) {
+      final client = MockClient((request) async {
+        requests.add(request);
+        if (request.url.host == 'anden.example.com') {
+          if (serverStatus != 200) {
+            return http.Response('{"error":"no_route","message":"x"}', serverStatus);
+          }
+          return http.Response.bytes(utf8.encode(jsonEncode(serverAnswer)), 200);
+        }
+        if (serverDown) return http.Response('"Error obteniendo horarios"', 400);
+        return http.Response.bytes(utf8.encode(timetableBody), 200);
+      });
+      return TimetableRepository(
+        FgvApi(client, now: clock.now),
+        store,
+        clock,
+        server: AndenServerApi(client, baseUrl: url, token: 'secret', now: clock.now),
+      );
+    }
+
+    List<String> hosts() => requests.map((r) => r.url.host).toList();
+
+    setUp(() {
+      serverStatus = 200;
+      serverAnswer = serverBody();
+    });
+
+    test('asks the server first, with the token and an ISO date', () async {
+      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
+
+      final request = requests.single;
+      expect(request.url.toString(), 'https://anden.example.com/v1/timetable?from=560&to=552&date=2026-10-27');
+      expect(request.headers['Authorization'], 'Bearer secret');
+      expect(t.departures, [DateTime(2026, 10, 27, 5, 49), DateTime(2026, 10, 27, 6, 11)]);
+      expect(t.fetchedAt, clock.now());
+      expect(repo().cached(560, 552, DateTime(2026, 10, 27))?.departures, hasLength(2));
+    });
+
+    test('asks FGV when the server fails', () async {
+      serverStatus = 404;
+      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
+
+      expect(hosts(), ['anden.example.com', 'www.fgv.es']);
+      expect(t.departures, hasLength(130));
+    });
+
+    test('throws the FGV error when both fail, and keeps the cache', () async {
+      final r = repo();
+      await r.get(560, 552, DateTime(2026, 10, 27));
+      serverStatus = 503;
+      serverDown = true;
+
+      await expectLater(
+        r.get(560, 552, DateTime(2026, 10, 27), force: true),
+        throwsA(isA<FgvApiException>().having((e) => e.statusCode, 'statusCode', 400)),
+      );
+      expect(r.cached(560, 552, DateTime(2026, 10, 27))?.departures, hasLength(2));
+    });
+
+    test('a change of line asks FGV after the server, and keeps FGV', () async {
+      serverAnswer = serverBody(legs: 2);
+      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
+
+      expect(hosts(), ['anden.example.com', 'www.fgv.es']);
+      expect(t.departures, hasLength(130));
+    });
+
+    test('a change of line uses the server when FGV fails', () async {
+      serverAnswer = serverBody(legs: 2);
+      serverDown = true;
+      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
+
+      expect(t.legs, 2);
+      expect(t.connection!.stationId, 554);
+      expect(t.connection!.rideMinutes, 8);
+      expect(t.complete, isTrue);
+    });
+
+    test('a cached change of line asks FGV first, the server only if FGV fails', () async {
+      serverAnswer = serverBody(legs: 2);
+      serverDown = true;
+      final r = repo();
+      await r.get(560, 552, DateTime(2026, 10, 27));
+      requests.clear();
+
+      await r.get(560, 552, DateTime(2026, 10, 27), force: true);
+      expect(hosts(), ['www.fgv.es', 'anden.example.com']);
+
+      serverDown = false;
+      requests.clear();
+      await r.get(560, 552, DateTime(2026, 10, 27), force: true);
+      expect(hosts(), ['www.fgv.es']);
+    });
+
+    test('without a URL the server is off and FGV is asked alone', () async {
+      await repo(url: '').get(560, 552, DateTime(2026, 10, 27));
+
+      expect(hosts(), ['www.fgv.es']);
+    });
+
+    test('an answer for another date is not used', () async {
+      serverAnswer = {...serverBody(), 'date': '2026-10-28'};
+      await repo().get(560, 552, DateTime(2026, 10, 27));
+
+      expect(hosts(), ['anden.example.com', 'www.fgv.es']);
     });
   });
 

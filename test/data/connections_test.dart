@@ -88,13 +88,13 @@ void main() {
     ];
 
     test('takes the first train reachable after the ride and the change', () {
-      // 08:15 + 8 min + 1 min = 08:24.
+      // 08:15 + 8 min + 2 min = 08:25.
       expect(findConnections([at(8, 15)], days)[at(8, 15)]!.at, at(8, 28));
     });
 
     test('the limit is inclusive and one minute later is missed', () {
-      expect(findConnections([at(8, 19)], days)[at(8, 19)]!.at, at(8, 28));
-      expect(findConnections([at(8, 20)], days)[at(8, 20)]!.at, at(9, 8));
+      expect(findConnections([at(8, 18)], days)[at(8, 18)]!.at, at(8, 28));
+      expect(findConnections([at(8, 19)], days)[at(8, 19)]!.at, at(9, 8));
     });
 
     test('continues after midnight', () {

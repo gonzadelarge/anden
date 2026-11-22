@@ -1,0 +1,4 @@
+{
+  "ANDEN_URL": "https://anden.gonzadelarge.com",
+  "ANDEN_TOKEN": "the 64 hex characters of ANDEN_TOKEN in /etc/anden/env on the VPS"
+}
