@@ -47,6 +47,13 @@ The hub reads that folder on every request, so it needs no restart or rebuild.
 
 6. **Commit** the version change.
 
+## Testers' copy on the VPS
+
+After HomePi, the script uploads the same APK and a `version.json` to `/opt/anden/releases` on
+the VPS. The download page `https://anden.gonzadelarge.com/download` offers it while it is open
+(anden_server docs/plan.md, "GET /download"). APK first, `version.json` last, checksum compared,
+like for HomePi.
+
 ## What the script does
 
 These are the manual steps, in case the script cannot be used:
