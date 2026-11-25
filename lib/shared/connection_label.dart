@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../app/theme/app_theme.dart';
 import '../core/time_format.dart';
-import '../data/services/connections.dart';
+import '../data/models/departure.dart';
 
 /// "> 08:28 L9 Riba-roja de Túria", small and grey. One text, so it is cut at
 /// the end: the time and the line stay visible when the width is short.
 class ConnectionLabel extends StatelessWidget {
   const ConnectionLabel({super.key, required this.connection, required this.maxLines, this.fontSize = 12});
 
-  final Connection connection;
+  /// The train at the change station.
+  final Departure connection;
   final int maxLines;
   final double fontSize;
 
@@ -30,8 +31,8 @@ class ConnectionLabel extends StatelessWidget {
             text: formatTime(connection.at),
             style: TextStyle(fontWeight: FontWeight.w600, color: t.muted, fontFeatures: tabular),
           ),
-          if (connection.line.isNotEmpty)
-            TextSpan(text: ' ${connection.line}', style: TextStyle(fontWeight: FontWeight.w600, color: t.muted)),
+          if (connection.lineName.isNotEmpty)
+            TextSpan(text: ' ${connection.lineName}', style: TextStyle(fontWeight: FontWeight.w600, color: t.muted)),
           TextSpan(text: ' ${connection.destination}'),
         ],
       ),

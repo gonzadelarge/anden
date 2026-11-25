@@ -1,14 +1,10 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:anden/app/routes/app_pages.dart';
 import 'package:anden/app/routes/app_routes.dart';
 import 'package:anden/app/theme/app_theme.dart';
 import 'package:anden/core/clock.dart';
 import 'package:anden/core/geo.dart';
 import 'package:anden/core/time_format.dart';
-import 'package:anden/data/api/fgv_api.dart';
-import 'package:anden/data/models/day_timetable.dart';
+import 'package:anden/data/api/anden_server_api.dart';
 import 'package:anden/data/models/favorite_trip.dart';
 import 'package:anden/data/models/station.dart';
 import 'package:anden/data/repositories/favorites_repository.dart';
@@ -16,12 +12,9 @@ import 'package:anden/data/repositories/favorite_stations_repository.dart';
 import 'package:anden/data/repositories/home_station_repository.dart';
 import 'package:anden/data/repositories/incident_repository.dart';
 import 'package:anden/data/repositories/learned_places_repository.dart';
-import 'package:anden/data/repositories/line_repository.dart';
-import 'package:anden/data/repositories/live_train_repository.dart';
 import 'package:anden/data/repositories/station_repository.dart';
 import 'package:anden/data/repositories/timetable_repository.dart';
 import 'package:anden/data/services/location_service.dart';
-import 'package:anden/data/services/next_departures.dart';
 import 'package:anden/data/storage/local_store.dart';
 import 'package:anden/modules/day_view/day_view_controller.dart';
 import 'package:anden/modules/home/go_to_controller.dart';
@@ -31,8 +24,8 @@ import 'package:anden/modules/incidents/incidents_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
+
+import '../support/fake_server.dart';
 
 class FakeLocation implements LocationService {
   FakeLocation(this.state, [this.point]);
@@ -67,16 +60,17 @@ class FakeLocation implements LocationService {
 }
 
 void main() {
-  String fixture(String name) => File('test/fixtures/$name').readAsStringSync();
-  final timetable = fixture('horarios_online2_amistat_colon.json');
-  final incidents = fixture('incidencias.json');
-  final lines = fixture('lineas.json');
-  final stations = fixture('estaciones_sample.json');
-  final live = fixture('horarios_prevision_amistat.json');
   // 50 m north of Colón, about 1.8 km from Amistat.
   const nearColon = GeoPoint(39.4705958, -0.3709277809);
-  final clock = FixedClock(DateTime(2026, 10, 27, 8, 0));
-  const trip = FavoriteTrip(aId: 560, aName: 'Amistat', bId: 552, bName: 'Colón');
+  // About 40 m from Amistat, and more than 600 m from any other station.
+  const nearAmistat = GeoPoint(39.4707, -0.3504);
+  final clock = FixedClock(DateTime(2026, 11, 26, 8, 0));
+  const trip = FavoriteTrip(aId: 121, aName: 'Amistat', bId: 70, bName: 'Colón');
+  const amistat = Station(id: 121, name: 'Amistat', latitude: 39.4703330994, longitude: -0.3503944576, lines: [5, 7]);
+  const colon = Station(id: 70, name: 'Colón', latitude: 39.4701461792, longitude: -0.3709277809, lines: [3, 5, 7, 9]);
+  const benimaclet = Station(id: 67, name: 'Benimaclet', latitude: 39.4848518372, longitude: -0.3623333275);
+
+  late FakeServer server;
 
   Future<void> pumpApp(
     WidgetTester tester, {
@@ -84,36 +78,19 @@ void main() {
     LocationService? location,
     Station? home,
     List<Station> favoriteStations = const [],
-    bool liveOnline = true,
-    String? timetableBody,
+    String timetableFile = 'timetable_amistat_colon.json',
+    String? timetableError,
   }) async {
     final store = MemoryStore();
-    final api = FgvApi(
-      MockClient((request) async {
-        final path = request.url.path;
-        if (path.contains('horarios-prevision')) {
-          return liveOnline ? http.Response.bytes(utf8.encode(live), 200) : http.Response('down', 500);
-        }
-        final body = path.endsWith('incidencias')
-            ? incidents
-            : path.endsWith('lineas')
-                ? lines
-                : path.endsWith('estaciones')
-                    ? stations
-                    : timetableBody ?? timetable;
-        return http.Response.bytes(utf8.encode(body), 200);
-      }),
-      now: clock.now,
-    );
+    server = FakeServer(timetableFile: timetableFile)..timetableError = timetableError;
+    final api = AndenServerApi(server.client, baseUrl: FakeServer.url, token: FakeServer.token, now: clock.now);
     final favorites = FavoritesRepository(store);
     for (final t in trips) {
       await favorites.add(t);
     }
     Get.put<Clock>(clock);
-    final stationRepo = Get.put(StationRepository(api, store, clock));
+    Get.put(StationRepository(api, store, clock));
     Get.put(TimetableRepository(api, store, clock));
-    final lineRepo = Get.put(LineRepository(api, store, clock));
-    Get.put(LiveTrainRepository(api, stationRepo, lineRepo, clock));
     final homeRepo = Get.put(HomeStationRepository(store));
     if (home != null) await homeRepo.set(home);
     final favoriteRepo = Get.put(FavoriteStationsRepository(store));
@@ -135,6 +112,14 @@ void main() {
     await tester.pump();
   }
 
+  /// Picks [name] in the open station picker through its search field.
+  Future<void> pickInPicker(WidgetTester tester, String name) async {
+    await tester.enterText(find.byType(TextField), name);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(name).last);
+    await tester.pumpAndSettle();
+  }
+
   tearDown(() {
     // Stops the tickers and lifecycle observers.
     Get.delete<HomeController>(force: true);
@@ -152,24 +137,35 @@ void main() {
     expect(find.text('Añadir trayecto'), findsOneWidget);
   });
 
-  testWidgets('shows both directions with the next departure', (tester) async {
+  testWidgets('shows both directions with the next departure, its line and destination', (tester) async {
     await pumpApp(tester, trips: [trip]);
-
-    final today = DayTimetable.fromApi(
-      jsonDecode(timetable) as Map<String, dynamic>,
-      originId: 560,
-      destinationId: 552,
-      date: clock.today(),
-      fetchedAt: clock.now(),
-    );
-    final first = nextDepartures([today], clock.now()).first;
 
     // One route line per card, in both directions.
     final routes = find.textContaining(RegExp('^(Amistat|Colón)￼(Amistat|Colón)\$'), findRichText: true);
     expect(routes, findsNWidgets(2));
-    // The fixture serves both directions, so both cards show the same time.
+    // The fixture serves both directions: next train 08:04 L5 Aeroport, then 08:11 L7, 08:19 L5.
+    final first = DateTime(2026, 11, 26, 8, 4);
     expect(find.text(formatTime(first)), findsNWidgets(2));
     expect(find.text(formatUntil(first, clock.now())), findsNWidgets(2));
+    expect(find.text('L5'), findsNWidgets(4));
+    expect(find.text('L7'), findsNWidgets(2));
+    expect(find.text('Torrent Avinguda'), findsNWidgets(2));
+  });
+
+  testWidgets('a trip the server has no route for says so instead of failing', (tester) async {
+    await pumpApp(tester, trips: [trip], timetableError: AndenServerException.noRoute);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sin horarios para este trayecto'), findsNWidgets(2));
+    expect(find.text('Reintentar'), findsNothing);
+    expect(find.textContaining('Sin conexión'), findsNothing);
+  });
+
+  testWidgets('a day the feed does not cover says so', (tester) async {
+    await pumpApp(tester, trips: [trip], timetableError: AndenServerException.dateNotCovered);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Horario aún no publicado para este día'), findsNWidgets(2));
   });
 
   testWidgets('the x on a card deletes the trip after confirming', (tester) async {
@@ -189,7 +185,11 @@ void main() {
     expect(find.text('Aún no tienes trayectos'), findsOneWidget);
   });
 
-  testWidgets('incidents tab shows the count and the line of each incident', (tester) async {
+  testWidgets('incidents tab shows the count, the category and the lines of each notice', (tester) async {
+    // Tall enough for the three notices and the source line.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await pumpApp(tester);
 
     // Badge on the bottom bar.
@@ -197,36 +197,29 @@ void main() {
 
     await tester.tap(find.text('Incidencias'));
     await tester.pumpAndSettle();
+    expect(find.text('INCIDENCIA'), findsOneWidget);
+    expect(find.text('SERVICIO ESPECIAL'), findsNWidgets(2));
     expect(find.text('L4'), findsNWidgets(2));
-    expect(find.text('L6'), findsOneWidget);
-    expect(find.textContaining('Empalme y Dr. Lluch'), findsOneWidget);
+    expect(find.text('L10'), findsOneWidget);
+    expect(find.textContaining('Por reorganización del servicio'), findsOneWidget);
+    expect(find.text('Ver en metrovalencia.es'), findsNWidgets(2));
+    expect(find.text('Fuente: metrovalencia.es'), findsOneWidget);
   });
 
-  group('line and destination', () {
-    testWidgets('a matched train shows its line and destination', (tester) async {
-      await pumpApp(tester, trips: [trip]);
-      await tester.pumpAndSettle();
+  testWidgets('"Acerca de" shows the source notes and the feed date', (tester) async {
+    await pumpApp(tester, trips: [trip]);
+    await tester.pumpAndSettle();
 
-      // Real times from the fixture: an L5 to Aeroport about 10 min after 08:00.
-      expect(find.text('L5'), findsWidgets);
-      expect(find.text('Aeroport'), findsWidgets);
-    });
+    await tester.tap(find.byTooltip('Acerca de'));
+    await tester.pumpAndSettle();
 
-    testWidgets('without real time the card shows the general line', (tester) async {
-      await pumpApp(tester, trips: [trip], liveOnline: false);
-      await tester.pumpAndSettle();
-
-      expect(find.text('L5, L7 hacia Aeroport, Av. del Cid, Torrent Avinguda'), findsWidgets);
-    });
+    expect(find.text('App no oficial. No tiene relación con FGV ni con Metrovalencia.'), findsOneWidget);
+    expect(find.textContaining('Powered by MITRAMS'), findsOneWidget);
+    expect(find.text('Datos de horarios actualizados el 24/11/2026'), findsOneWidget);
+    expect(find.text('Avisos de metrovalencia.es'), findsOneWidget);
   });
 
   group('go home', () {
-    const colon = Station(id: 552, fgvId: 15, name: 'Colón', latitude: 39.47, longitude: -0.37, interchange: true);
-    const amistat =
-        Station(id: 560, fgvId: 23, name: 'Amistat', latitude: 39.47, longitude: -0.35, interchange: false);
-    // About 40 m from Amistat, and more than 400 m from the other sample stations.
-    const nearAmistat = GeoPoint(39.4707, -0.3504);
-
     testWidgets('one nearby station goes straight to the next trains', (tester) async {
       final location = FakeLocation(LocationAccess.granted, nearAmistat);
       await pumpApp(tester, location: location, home: colon);
@@ -242,8 +235,13 @@ void main() {
     });
 
     testWidgets('two stations about as close are offered before any trains', (tester) async {
-      // Halfway between Colón and Àngel Guimerà. Casa is Amistat.
-      await pumpApp(tester, location: FakeLocation(LocationAccess.granted, const GeoPoint(39.4702243805, -0.3779819459)), home: amistat);
+      // Halfway between Colón and Àngel Guimerà: Xàtiva, Pl. Espanya and Àngel Guimerà are
+      // within 400 m of the nearest one. Casa is Amistat.
+      await pumpApp(
+        tester,
+        location: FakeLocation(LocationAccess.granted, const GeoPoint(39.4702243805, -0.3779819459)),
+        home: amistat,
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Llévame a casa'));
@@ -252,10 +250,10 @@ void main() {
       expect(find.text('¿Desde qué parada sales?'), findsOneWidget);
       expect(find.text('Ver todo el horario'), findsNothing);
 
-      await tester.tap(find.text('Colón'));
+      await tester.tap(find.text('Xàtiva'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Colón  →  Amistat'), findsOneWidget);
+      expect(find.text('Xàtiva  →  Amistat'), findsOneWidget);
       expect(find.text('Ver todo el horario'), findsOneWidget);
     });
 
@@ -281,15 +279,15 @@ void main() {
   });
 
   testWidgets('the day view shows the second train of a trip with a change', (tester) async {
-    await pumpApp(tester, timetableBody: fixture('horarios_online2_sant_isidre_ribaroja.json'));
+    await pumpApp(tester, timetableFile: 'timetable_sant_isidre_ribaroja.json');
     await tester.pumpAndSettle();
 
     Get.toNamed(
       Routes.dayView,
       arguments: const TripDirection(
-        originId: 565,
+        originId: 78,
         originName: 'Sant Isidre',
-        destinationId: 593,
+        destinationId: 186,
         destinationName: 'Riba-roja de Túria',
       ),
     );
@@ -297,15 +295,13 @@ void main() {
 
     expect(find.textContaining('Transbordo en Àngel Guimerà'), findsOneWidget);
     expect(find.textContaining('Riba-roja de Túria', findRichText: true), findsWidgets);
+    // First leg on its own label, the L9 inside each connection label.
+    expect(find.text('L1'), findsWidgets);
+    expect(find.textContaining(' L9 ', findRichText: true), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
   group('favourite stations', () {
-    const benimaclet =
-        Station(id: 226, fgvId: 12, name: 'Benimaclet', latitude: 39.48, longitude: -0.36, interchange: true);
-    // About 40 m from Amistat.
-    const nearAmistat = GeoPoint(39.4707, -0.3504);
-
     Future<void> openFavorites(WidgetTester tester) async {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Estaciones favoritas'));
@@ -340,8 +336,7 @@ void main() {
       await tester.tap(find.byTooltip('Cambiar origen'));
       await tester.pumpAndSettle();
       expect(find.text('¿Desde dónde sales?'), findsOneWidget);
-      await tester.tap(find.text('Colón'));
-      await tester.pumpAndSettle();
+      await pickInPicker(tester, 'Colón');
 
       expect(find.text('Colón  →  Benimaclet'), findsOneWidget);
     });
@@ -353,8 +348,7 @@ void main() {
 
       await tester.tap(find.text('Añadir estación'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Colón'));
-      await tester.pumpAndSettle();
+      await pickInPicker(tester, 'Colón');
       expect(find.byTooltip('Quitar Colón'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Quitar Colón'));
@@ -363,7 +357,7 @@ void main() {
 
       final repo = Get.find<FavoriteStationsRepository>();
       for (final (i, id) in [1, 2, 3, 4].indexed) {
-        final added = await repo.add(Station(id: id, fgvId: id, name: '$id', latitude: 0, longitude: 0, interchange: false));
+        final added = await repo.add(Station(id: id, name: '$id', latitude: 0, longitude: 0));
         expect(added, i < 3);
       }
       await tester.pump();

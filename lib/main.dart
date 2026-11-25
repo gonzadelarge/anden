@@ -10,10 +10,13 @@ import 'app/routes/app_pages.dart';
 import 'app/routes/app_routes.dart';
 import 'app/theme/app_theme.dart';
 import 'data/storage/local_store.dart';
+import 'data/storage/schema.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await GetStorage.init(GetStorageStore.boxName);
+  // Before any repository reads the box.
+  await migrateStore(GetStorageStore());
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const AndenApp());
 }

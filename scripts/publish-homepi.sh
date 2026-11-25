@@ -17,17 +17,16 @@ APK=build/app/outputs/flutter-apk/app-release.apk
 
 cd "$(dirname "$0")/.."
 
-# URL and token of the own timetable server (gitignored). Without the file the app
-# asks FGV only, as before. Template: config/anden_server.example.json.
+# URL and token of the own server (gitignored). Required: since 2.0 the server is the
+# app's only data source. Template: config/anden_server.example.json.
 DEFINES=config/anden_server.json
 
 if [[ "${1:-}" != "--no-build" ]]; then
-  if [[ -f "$DEFINES" ]]; then
-    flutter build apk --release --dart-define-from-file="$DEFINES"
-  else
-    echo "Warning: $DEFINES missing, building without the own server." >&2
-    flutter build apk --release
+  if [[ ! -f "$DEFINES" ]]; then
+    echo "Error: $DEFINES missing. Without it the app has no data source." >&2
+    exit 1
   fi
+  flutter build apk --release --dart-define-from-file="$DEFINES"
 fi
 
 version=$(grep '^version:' pubspec.yaml | cut -d' ' -f2)

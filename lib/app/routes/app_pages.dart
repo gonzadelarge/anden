@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 
+import '../../modules/about/about_view.dart';
 import '../../modules/day_view/day_view_binding.dart';
 import '../../modules/day_view/day_view_view.dart';
 import '../../modules/shell/shell_binding.dart';
@@ -12,5 +13,6 @@ abstract class AppPages {
     GetPage(name: Routes.home, page: () => const ShellView(), binding: ShellBinding()),
     GetPage(name: Routes.dayView, page: () => const DayViewView(), binding: DayViewBinding()),
     GetPage(name: Routes.stationPicker, page: () => const StationPickerView()),
+    GetPage(name: Routes.about, page: () => const AboutView()),
   ];
 }

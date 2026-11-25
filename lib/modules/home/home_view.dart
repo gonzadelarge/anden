@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/app_info.dart';
+import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/time_format.dart';
 import '../../data/models/favorite_trip.dart';
@@ -28,7 +29,6 @@ class HomeView extends GetView<HomeController> {
             controller.states.length;
             controller.nearby.highlighted.length;
             controller.nearby.reason.value;
-            controller.live.revision.value;
             final showPrompt = controller.nearby.promptVisible.value && trips.isNotEmpty;
 
             return CustomScrollView(
@@ -64,15 +64,26 @@ Widget _header(BuildContext context, DateTime now) {
   return SectionHeader(
     overline: appName,
     title: '${day[0].toUpperCase()}${day.substring(1)}',
-    action: IconButton(
-      onPressed: Get.find<HomeController>().addTrip,
-      tooltip: 'Añadir trayecto',
-      style: IconButton.styleFrom(
-        backgroundColor: t.surface,
-        side: BorderSide(color: t.border),
-        fixedSize: const Size(48, 48),
-      ),
-      icon: Icon(Icons.add_rounded, color: t.text),
+    action: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          onPressed: () => Get.toNamed(Routes.about),
+          tooltip: 'Acerca de',
+          icon: Icon(Icons.info_outline_rounded, color: t.muted),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          onPressed: Get.find<HomeController>().addTrip,
+          tooltip: 'Añadir trayecto',
+          style: IconButton.styleFrom(
+            backgroundColor: t.surface,
+            side: BorderSide(color: t.border),
+            fixedSize: const Size(48, 48),
+          ),
+          icon: Icon(Icons.add_rounded, color: t.text),
+        ),
+      ],
     ),
   );
 }
@@ -94,8 +105,6 @@ class _TripGroup extends GetView<HomeController> {
             highlight: _highlightLabel(d),
             state: controller.stateOf(d),
             next: controller.nextOf(d),
-            trains: controller.trainsOf(d, controller.nextOf(d)),
-            summary: controller.summaryOf(d),
             connections: controller.connectionsOf(d, controller.nextOf(d)),
             transferAt: controller.transferAtOf(d),
             now: now,

@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../data/models/favorite_trip.dart';
-import '../../../data/models/live_train.dart';
-import '../../../data/services/connections.dart';
+import '../../../data/models/departure.dart';
 import '../home_controller.dart';
 import 'departures.dart';
 
@@ -15,8 +14,6 @@ class TripCard extends StatelessWidget {
     this.highlight,
     required this.state,
     required this.next,
-    this.trains = const {},
-    this.summary,
     this.connections = const {},
     this.transferAt,
     required this.now,
@@ -31,10 +28,8 @@ class TripCard extends StatelessWidget {
   /// Label shown when the card is highlighted by location ("Cerca de ti").
   final String? highlight;
   final DirectionState state;
-  final List<DateTime> next;
-  final Map<DateTime, LiveTrain> trains;
-  final String? summary;
-  final Map<DateTime, Connection> connections;
+  final List<Departure> next;
+  final Map<Departure, Departure> connections;
   final String? transferAt;
   final DateTime now;
   final VoidCallback onTap;
@@ -77,8 +72,6 @@ class TripCard extends StatelessWidget {
       return Departures(
         next: next,
         now: now,
-        trains: trains,
-        summary: summary,
         connections: connections,
         transferAt: transferAt,
       );
@@ -92,6 +85,16 @@ class TripCard extends StatelessWidget {
             const SizedBox(width: 12),
             Text('Cargando horarios…', style: TextStyle(color: t.muted)),
           ],
+        ),
+      );
+    }
+    final notice = state.notice;
+    if (notice != null && !state.hasData) {
+      return SizedBox(
+        height: 52,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(notice, style: TextStyle(color: t.muted)),
         ),
       );
     }

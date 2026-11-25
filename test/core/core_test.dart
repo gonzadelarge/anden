@@ -26,8 +26,7 @@ void main() {
       expect(formatUntil(DateTime(2026, 10, 27, 9, 6), now), 'en 1 h 5 min');
     });
 
-    test('API date and cache key', () {
-      expect(formatApiDate(DateTime(2026, 3, 7)), '07/03/2026');
+    test('cache key', () {
       expect(formatDateKey(DateTime(2026, 3, 7)), '20260307');
       expect(parseDateKey('20260307'), DateTime(2026, 3, 7));
     });

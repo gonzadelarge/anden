@@ -10,7 +10,7 @@ task.
 
 ```sh
 flutter pub get
-flutter run            # with an emulator or a phone connected
+flutter run --dart-define-from-file=config/anden_server.json   # needs the server URL and token
 flutter test
 flutter analyze
 ```

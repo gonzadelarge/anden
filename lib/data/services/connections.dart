@@ -1,63 +1,32 @@
 import '../models/day_timetable.dart';
-import '../models/live_train.dart';
-import 'train_match.dart';
+import '../models/departure.dart';
 
 /// Time to get off one train and reach the other platform. FGV uses 2 min after each
 /// train's own arrival (anden_server docs/fgv-routing.md, rule 3); the app adds it to the
 /// usual ride, so it matches FGV's connection in most cases.
 const transferMargin = Duration(minutes: 2);
 
-/// The train to take at the change station.
-class Connection {
-  const Connection({required this.at, required this.line, required this.destination});
-
-  final DateTime at;
-
-  /// "L9", or "L3, L5" when the line of this train is not known.
-  final String line;
-  final String destination;
-}
-
 /// For each first-leg departure, the first train at the change station that
 /// can be reached. Empty for direct trips or when the ride time is unknown.
 ///
-/// Pass today and tomorrow: the connection can be after midnight. [live] are
-/// the real-time trains at the change station; [lines] are used without them.
-Map<DateTime, Connection> findConnections(
-  List<DateTime> departures,
-  Iterable<DayTimetable?> days, {
-  List<LiveTrain> live = const [],
-  List<String> lines = const [],
-}) {
+/// Pass today and tomorrow: the connection can be after midnight.
+Map<Departure, Departure> findConnections(List<Departure> departures, Iterable<DayTimetable?> days) {
   final legs = days.map((d) => d?.connection).whereType<ConnectionLeg>().toList();
   final rides = legs.map((l) => l.rideMinutes).whereType<int>();
   if (rides.isEmpty) return const {};
   final ride = Duration(minutes: rides.first);
 
-  final times = <DateTime>{for (final leg in legs) ...leg.departures}.toList()..sort();
-  final destinations = {for (final leg in legs) ...leg.destinations}.toList();
+  final trains = <Departure>{for (final leg in legs) ...leg.departures}.toList()..sort(Departure.compare);
 
-  final chosen = <DateTime, DateTime>{};
+  final chosen = <Departure, Departure>{};
   for (final departure in departures) {
-    final earliest = departure.add(ride + transferMargin);
-    for (final time in times) {
-      if (!time.isBefore(earliest)) {
-        chosen[departure] = time;
+    final earliest = departure.at.add(ride + transferMargin);
+    for (final train in trains) {
+      if (!train.at.isBefore(earliest)) {
+        chosen[departure] = train;
         break;
       }
     }
   }
-
-  final trains = matchLiveTrains(chosen.values.toSet().toList(), live, destinations);
-  return chosen.map((departure, time) {
-    final train = trains[time];
-    return MapEntry(
-      departure,
-      Connection(
-        at: time,
-        line: train?.lineName ?? lines.join(', '),
-        destination: train?.destination ?? destinations.join(', '),
-      ),
-    );
-  });
+  return chosen;
 }

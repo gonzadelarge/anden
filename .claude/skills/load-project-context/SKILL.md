@@ -21,8 +21,8 @@ Load **only** what the task needs. All docs together (archive included) are ~10k
    you will make. Honour the "Skip" column.
 4. **Report in one line** what you loaded, so the user can correct a bad route:
 
-   > Loaded: `AGENTS.md` + `docs/fgv-api.md` (~2k tokens). Skipped architecture, behaviour,
-   > design — say if the task needs them.
+   > Loaded: `AGENTS.md` + `docs/behaviour.md` (~2k tokens). Skipped architecture, design,
+   > publishing — say if the task needs them.
 
 Then start the work.
 

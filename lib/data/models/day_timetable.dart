@@ -1,5 +1,5 @@
-import '../../core/clock.dart';
 import '../../core/time_format.dart';
+import 'departure.dart';
 
 /// The second train of a trip with a change of line.
 class ConnectionLeg {
@@ -15,23 +15,26 @@ class ConnectionLeg {
   final int stationId;
   final String stationName;
 
-  /// Minutes on the first train. Null when it could not be downloaded.
+  /// Minutes on the first train. Null when the server did not send it.
   final int? rideMinutes;
 
-  /// Departures from the change station on the same service date.
-  final List<DateTime> departures;
+  /// Departures from the change station on the same service date, sorted.
+  final List<Departure> departures;
   final List<String> destinations;
 
   Map<String, dynamic> toJson() => {
         'stationId': stationId,
         'stationName': stationName,
         'rideMinutes': rideMinutes,
-        'departures': departures.map(formatTime).toList(),
+        'departures': departures.map((d) => d.toJson()).toList(),
         'destinations': destinations,
       };
 }
 
 /// All departures from one station to another on one service date.
+///
+/// The JSON shape is the server's `/v2/timetable` answer (anden_server docs/plan-v2.md,
+/// section 4), with the date as a cache key and a `fetchedAt` added by the app.
 class DayTimetable {
   const DayTimetable({
     required this.originId,
@@ -43,6 +46,7 @@ class DayTimetable {
     this.legs = 1,
     this.destinations = const [],
     this.connection,
+    this.feedDate,
   });
 
   final int originId;
@@ -51,9 +55,9 @@ class DayTimetable {
   /// Service date (time part is zero).
   final DateTime date;
 
-  /// Departure times from the origin, sorted. They belong to [date], including
-  /// the night service after midnight that the API lists under hour "00".
-  final List<DateTime> departures;
+  /// Departures from the origin, sorted. They belong to [date], including the night
+  /// service after midnight that the server lists as "00:xx".
+  final List<Departure> departures;
   final DateTime fetchedAt;
   final int? durationMinutes;
 
@@ -67,93 +71,11 @@ class DayTimetable {
   /// Second train when [legs] is more than 1. A third train, if any, is not kept.
   final ConnectionLeg? connection;
 
+  /// Date of the GTFS feed the server used, "2026-11-24". Null in old entries.
+  final String? feedDate;
+
   /// False when a change of line lacks data: a cached copy is downloaded again.
   bool get complete => legs <= 1 || connection?.rideMinutes != null;
-
-  DayTimetable withRideMinutes(int? minutes) {
-    final leg = connection;
-    return DayTimetable(
-      originId: originId,
-      destinationId: destinationId,
-      date: date,
-      departures: departures,
-      fetchedAt: fetchedAt,
-      durationMinutes: durationMinutes,
-      legs: legs,
-      destinations: destinations,
-      connection: leg == null
-          ? null
-          : ConnectionLeg(
-              stationId: leg.stationId,
-              stationName: leg.stationName,
-              rideMinutes: minutes,
-              departures: leg.departures,
-              destinations: leg.destinations,
-            ),
-    );
-  }
-
-  /// Parses the body of `POST horarios-online2`.
-  factory DayTimetable.fromApi(
-    Map<String, dynamic> json, {
-    required int originId,
-    required int destinationId,
-    required DateTime date,
-    required DateTime fetchedAt,
-  }) {
-    final day = dateOnly(date);
-    final results = json['resultado'];
-    if (results is! List || results.isEmpty) {
-      return DayTimetable(
-        originId: originId,
-        destinationId: destinationId,
-        date: day,
-        departures: const [],
-        fetchedAt: fetchedAt,
-      );
-    }
-    final first = results.first as Map<String, dynamic>;
-    final legs = (first['transbordos'] as List?) ?? const [];
-    final firstLeg = legs.isEmpty ? const <String, dynamic>{} : legs.first as Map<String, dynamic>;
-
-    final departures = _parseHours(firstLeg['horas'], day);
-
-    return DayTimetable(
-      originId: originId,
-      destinationId: destinationId,
-      date: day,
-      departures: departures,
-      fetchedAt: fetchedAt,
-      durationMinutes: (first['duracion_minutos'] as num?)?.toInt(),
-      legs: legs.isEmpty ? 1 : legs.length,
-      destinations: ((firstLeg['destinos'] as List?) ?? const []).cast<String>(),
-      connection: legs.length > 1 ? _parseConnection(legs[1] as Map<String, dynamic>, day) : null,
-    );
-  }
-
-  static ConnectionLeg _parseConnection(Map<String, dynamic> leg, DateTime day) {
-    final station = leg['estacion_origen_transbordo'] as Map<String, dynamic>;
-    return ConnectionLeg(
-      stationId: station['id'] as int,
-      stationName: (station['nombre'] as String).trim(),
-      rideMinutes: null,
-      departures: _parseHours(leg['horas'], day),
-      destinations: ((leg['destinos'] as List?) ?? const []).cast<String>(),
-    );
-  }
-
-  static List<DateTime> _parseHours(Object? hours, DateTime day) {
-    final departures = <DateTime>[];
-    // An empty day comes back as [] instead of {}.
-    if (hours is Map) {
-      for (final times in hours.values) {
-        for (final value in times as List) {
-          departures.add(_atTime(day, value as String));
-        }
-      }
-    }
-    return departures..sort();
-  }
 
   factory DayTimetable.fromJson(Map<String, dynamic> json) {
     final day = parseDateKey(json['date'] as String);
@@ -162,20 +84,21 @@ class DayTimetable {
       originId: json['originId'] as int,
       destinationId: json['destinationId'] as int,
       date: day,
-      departures: (json['departures'] as List).map((t) => _atTime(day, t as String)).toList(),
+      departures: _departures(json['departures'], day),
       fetchedAt: DateTime.parse(json['fetchedAt'] as String),
-      durationMinutes: json['durationMinutes'] as int?,
-      legs: json['legs'] as int? ?? 1,
+      durationMinutes: (json['durationMinutes'] as num?)?.toInt(),
+      legs: (json['legs'] as num?)?.toInt() ?? 1,
       destinations: ((json['destinations'] as List?) ?? const []).cast<String>(),
       connection: leg == null
           ? null
           : ConnectionLeg(
               stationId: leg['stationId'] as int,
-              stationName: leg['stationName'] as String,
-              rideMinutes: leg['rideMinutes'] as int?,
-              departures: (leg['departures'] as List).map((t) => _atTime(day, t as String)).toList(),
-              destinations: (leg['destinations'] as List).cast<String>(),
+              stationName: (leg['stationName'] as String).trim(),
+              rideMinutes: (leg['rideMinutes'] as num?)?.toInt(),
+              departures: _departures(leg['departures'], day),
+              destinations: ((leg['destinations'] as List?) ?? const []).cast<String>(),
             ),
+      feedDate: json['feedDate'] as String?,
     );
   }
 
@@ -183,19 +106,16 @@ class DayTimetable {
         'originId': originId,
         'destinationId': destinationId,
         'date': formatDateKey(date),
-        'departures': departures.map(formatTime).toList(),
+        'departures': departures.map((d) => d.toJson()).toList(),
         'fetchedAt': fetchedAt.toIso8601String(),
         'durationMinutes': durationMinutes,
         'legs': legs,
         'destinations': destinations,
         'connection': connection?.toJson(),
+        'feedDate': feedDate,
       };
 
-  static DateTime _atTime(DateTime day, String hhmm) {
-    final parts = hhmm.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = int.parse(parts[1]);
-    // DateTime rolls over on its own if the API ever sends "24:10".
-    return DateTime(day.year, day.month, day.day, hour, minute);
-  }
+  static List<Departure> _departures(Object? list, DateTime day) =>
+      ((list as List?) ?? const []).map((d) => Departure.fromJson(Map<String, dynamic>.from(d as Map), day)).toList()
+        ..sort(Departure.compare);
 }

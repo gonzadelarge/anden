@@ -3,4 +3,5 @@ abstract class Routes {
   static const home = '/';
   static const dayView = '/day';
   static const stationPicker = '/station';
+  static const about = '/about';
 }

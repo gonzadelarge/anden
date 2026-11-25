@@ -6,15 +6,16 @@ import 'package:get/get.dart';
 
 import '../../core/clock.dart';
 import '../../data/models/day_timetable.dart';
+import '../../data/models/departure.dart';
 import '../../data/models/favorite_trip.dart';
 import '../../data/repositories/favorites_repository.dart';
-import '../../data/repositories/live_train_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
 import '../../data/services/connections.dart';
 import '../../shared/messages.dart';
+import '../../shared/timetable_notice.dart';
 
 class DayViewController extends GetxController {
-  DayViewController(TripDirection initial, this._timetables, this._favorites, this._clock, this.live)
+  DayViewController(TripDirection initial, this._timetables, this._favorites, this._clock)
       : direction = initial.obs;
 
   /// Fixed row height, so the list can jump straight to the next train.
@@ -26,7 +27,6 @@ class DayViewController extends GetxController {
   final TimetableRepository _timetables;
   final FavoritesRepository _favorites;
   final Clock _clock;
-  final LiveTrainRepository live;
 
   final Rx<TripDirection> direction;
   late final Rx<DateTime> date;
@@ -36,6 +36,9 @@ class DayViewController extends GetxController {
   final nextDay = Rxn<DayTimetable>();
   final loading = false.obs;
   final failed = false.obs;
+
+  /// The server has no timetable for this trip or day. See [timetableNotice].
+  final notice = Rxn<String>();
   final saved = false.obs;
   late final Rx<DateTime> now;
   final scroll = ScrollController();
@@ -53,13 +56,13 @@ class DayViewController extends GetxController {
     final departures = timetable.value?.departures ?? const [];
     final n = now.value;
     final from = DateTime(n.year, n.month, n.day, n.hour, n.minute);
-    return departures.indexWhere((t) => !t.isBefore(from));
+    return departures.indexWhere((d) => !d.at.isBefore(from));
   }
 
   /// The train to take at the change station for each departure.
-  Map<DateTime, Connection> get connections {
-    final departures = timetable.value?.departures ?? const <DateTime>[];
-    return live.connections(departures, [timetable.value, nextDay.value], direction.value.destinationId);
+  Map<Departure, Departure> get connections {
+    final departures = timetable.value?.departures ?? const <Departure>[];
+    return findConnections(departures, [timetable.value, nextDay.value]);
   }
 
   FavoriteTrip get _trip {
@@ -118,6 +121,7 @@ class DayViewController extends GetxController {
     nextDay.value = _timetables.cached(d.originId, d.destinationId, following);
     final hadCache = timetable.value != null;
     failed.value = false;
+    notice.value = null;
     loading.value = true;
     if (hadCache && !force) _scrollToNext();
 
@@ -127,15 +131,16 @@ class DayViewController extends GetxController {
       timetable.value = result;
       // Do not move the list again if the user is already looking at it.
       if (!hadCache) _scrollToNext();
-      final change = result.connection;
-      if (change != null) {
-        live.refresh([change.stationId]);
+      if (result.connection != null) {
         final next = await _timetables.get(d.originId, d.destinationId, following, force: force);
         if (request == _requestId) nextDay.value = next;
       }
-    } catch (_) {
+    } catch (e) {
       if (request != _requestId) return;
-      failed.value = timetable.value == null;
+      if (timetable.value == null) {
+        notice.value = timetableNotice(e);
+        failed.value = notice.value == null;
+      }
     } finally {
       if (request == _requestId) loading.value = false;
     }

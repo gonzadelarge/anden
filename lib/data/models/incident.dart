@@ -1,62 +1,56 @@
-/// A service notice for one line.
+/// A service notice from metrovalencia.es, read by the own server.
 class Incident {
   const Incident({
-    required this.id,
-    required this.lineId,
+    required this.category,
+    required this.priority,
     required this.title,
-    required this.text,
-    required this.updatedAt,
+    required this.lines,
+    this.url = '',
   });
 
-  final int id;
+  /// The site's category, for example `incidencia` or `servicio_especial`.
+  final String category;
 
-  /// Internal line id, see [Line.id].
-  final int lineId;
+  /// From the site's priority block. The server sends these first.
+  final bool priority;
   final String title;
-  final String text;
-  final DateTime updatedAt;
 
-  /// Parses `GET incidencias`. The texts come in a separate list, one entry
-  /// per language; [locale] is picked first, then any other language.
-  static List<Incident> listFromApi(Map<String, dynamic> json, {String locale = 'ES'}) {
-    final translations = <int, List<Map<String, dynamic>>>{};
-    for (final t in ((json['incidencias_translations'] as List?) ?? const []).cast<Map<String, dynamic>>()) {
-      if (t['deleted_at'] != null) continue;
-      translations.putIfAbsent(t['incidencia_id'] as int, () => []).add(t);
-    }
+  /// Public line numbers, 4 for L4.
+  final List<int> lines;
 
-    final result = <Incident>[];
-    for (final i in ((json['incidencias'] as List?) ?? const []).cast<Map<String, dynamic>>()) {
-      if (i['deleted_at'] != null || (i['sede'] != null && i['sede'] != 'V')) continue;
-      final texts = translations[i['id']] ?? const [];
-      if (texts.isEmpty) continue;
-      final chosen = texts.firstWhere((t) => t['locale'] == locale, orElse: () => texts.first);
-      final text = ((chosen['descripcion'] as String?) ?? '').trim();
-      if (text.isEmpty) continue;
-      result.add(Incident(
-        id: i['id'] as int,
-        lineId: i['linea_id'] as int,
-        title: ((chosen['titulo'] as String?) ?? '').trim(),
-        text: text,
-        updatedAt: DateTime.parse((i['updated_at'] ?? i['created_at']) as String).toLocal(),
-      ));
-    }
-    return result;
+  /// The notice's own link, "" when it has none.
+  final String url;
+
+  /// "Incidencia", "Servicio especial". Unknown categories are written out as they come.
+  String get categoryLabel {
+    final known = _categories[category];
+    if (known != null) return known;
+    final words = category.replaceAll('_', ' ').trim();
+    return words.isEmpty ? 'Aviso' : '${words[0].toUpperCase()}${words.substring(1)}';
   }
 
+  static const _categories = {
+    'incidencia': 'Incidencia',
+    'alerta_meteorologica': 'Alerta meteorológica',
+    'circulacion': 'Circulación',
+    'medioambiental': 'Medioambiental',
+    'servicio_especial': 'Servicio especial',
+  };
+
+  /// Same shape in `/v2/incidents` and in the cache.
   factory Incident.fromJson(Map<String, dynamic> json) => Incident(
-        id: json['id'] as int,
-        lineId: json['lineId'] as int,
-        title: json['title'] as String,
-        text: json['text'] as String,
-        updatedAt: DateTime.parse(json['updatedAt'] as String),
+        category: (json['category'] as String?) ?? '',
+        priority: json['priority'] == true,
+        title: ((json['title'] as String?) ?? '').trim(),
+        lines: ((json['lines'] as List?) ?? const []).map((l) => (l as num).toInt()).toList(),
+        url: (json['url'] as String?) ?? '',
       );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'lineId': lineId,
+        'category': category,
+        'priority': priority,
         'title': title,
-        'text': text,
-        'updatedAt': updatedAt.toIso8601String(),
+        'lines': lines,
+        'url': url,
       };
 }

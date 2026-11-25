@@ -11,9 +11,6 @@ String formatTime(DateTime t) => '${two(t.hour)}:${two(t.minute)}';
 /// "domingo, 25 oct"
 String formatDayLong(DateTime d) => '${_weekdays[d.weekday - 1]}, ${d.day} ${_months[d.month - 1]}';
 
-/// "27/10/2026", the format the FGV API expects.
-String formatApiDate(DateTime d) => '${two(d.day)}/${two(d.month)}/${d.year}';
-
 /// "20261027", used in cache keys.
 String formatDateKey(DateTime d) => '${d.year}${two(d.month)}${two(d.day)}';
 

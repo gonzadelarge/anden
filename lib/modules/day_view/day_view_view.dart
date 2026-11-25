@@ -4,8 +4,9 @@ import 'package:get/get.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/time_format.dart';
 import '../../data/models/day_timetable.dart';
-import '../../data/services/connections.dart';
+import '../../data/models/departure.dart';
 import '../../shared/connection_label.dart';
+import '../../shared/train_label.dart';
 import 'day_view_controller.dart';
 
 class DayViewView extends GetView<DayViewController> {
@@ -99,12 +100,13 @@ class DayViewView extends GetView<DayViewController> {
     final now = controller.now.value;
     final isToday = controller.isToday;
     final nextIndex = isToday ? controller.nextIndex : 0;
-    // Read this so Obx rebuilds when the real-time lines arrive.
-    controller.live.revision.value;
+    // Read this so Obx rebuilds when the next day (for connections) arrives.
     controller.nextDay.value;
     final connections = controller.connections;
 
     if (timetable == null) {
+      final notice = controller.notice.value;
+      if (notice != null) return _Message(text: '$notice.');
       if (controller.failed.value) {
         return _Message(
           text: 'No se pudieron cargar los horarios.',
@@ -126,15 +128,15 @@ class DayViewView extends GetView<DayViewController> {
         padding: EdgeInsets.only(bottom: 32 + MediaQuery.paddingOf(context).bottom),
         itemCount: timetable.departures.length,
         itemBuilder: (context, i) {
-          final time = timetable.departures[i];
+          final train = timetable.departures[i];
           final past = isToday && (nextIndex == -1 || i < nextIndex);
           return _Row(
-            time: time,
-            connection: connections[time],
+            train: train,
+            connection: connections[train],
             now: now,
             past: past,
             isNext: isToday && i == nextIndex,
-            showUntil: isToday && !past && time.difference(now).inMinutes < 60,
+            showUntil: isToday && !past && train.at.difference(now).inMinutes < 60,
           );
         },
       ),
@@ -221,7 +223,7 @@ class _Summary extends StatelessWidget {
 
 class _Row extends StatelessWidget {
   const _Row({
-    required this.time,
+    required this.train,
     this.connection,
     required this.now,
     required this.past,
@@ -229,10 +231,10 @@ class _Row extends StatelessWidget {
     required this.showUntil,
   });
 
-  final DateTime time;
+  final Departure train;
 
   /// The train to take at the change station.
-  final Connection? connection;
+  final Departure? connection;
   final DateTime now;
   final bool past;
   final bool isNext;
@@ -257,7 +259,7 @@ class _Row extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              formatTime(time),
+              formatTime(train.at),
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: isNext ? FontWeight.w700 : FontWeight.w500,
@@ -265,21 +267,28 @@ class _Row extends StatelessWidget {
                 fontFeatures: tabular,
               ),
             ),
-            if (connection != null)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Opacity(
-                    opacity: past ? 0.6 : 1,
-                    child: ConnectionLabel(connection: connection!, maxLines: 2, fontSize: 14),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Opacity(
+                  opacity: past ? 0.6 : 1,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TrainLabel(train: train, fontSize: 14),
+                      if (connection != null) ...[
+                        const SizedBox(height: 2),
+                        ConnectionLabel(connection: connection!, maxLines: 1, fontSize: 13),
+                      ],
+                    ],
                   ),
                 ),
-              )
-            else
-              const Spacer(),
+              ),
+            ),
             if (showUntil)
               Text(
-                formatUntil(time, now),
+                formatUntil(train.at, now),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: isNext ? FontWeight.w600 : FontWeight.w400,

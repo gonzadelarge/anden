@@ -31,8 +31,9 @@ The hub reads that folder on every request, so it needs no restart or rebuild.
 
 3. **Own server settings:** `config/anden_server.json` must exist (gitignored; template
    `config/anden_server.example.json`). It holds `ANDEN_URL` and `ANDEN_TOKEN`; the token is the
-   one in `/etc/anden/env` on the VPS. Without the file the script warns and builds an APK that
-   asks FGV only.
+   one in `/etc/anden/env` on the VPS. **Required** since 2.0: the server is the app's only data
+   source, so the script stops without the file. `flutter run` from Android Studio also needs
+   `--dart-define-from-file=config/anden_server.json` in the run configuration.
 
 4. **Build and publish** (Git Bash, from the project folder):
 

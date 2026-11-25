@@ -7,20 +7,19 @@ import '../../app/routes/app_routes.dart';
 import '../../core/clock.dart';
 import '../../data/models/day_timetable.dart';
 import '../../data/models/favorite_trip.dart';
-import '../../data/models/live_train.dart';
+import '../../data/models/departure.dart';
 import '../../data/repositories/favorites_repository.dart';
-import '../../data/repositories/live_train_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
 import '../../data/services/connections.dart';
 import '../../data/services/next_departures.dart';
-import '../../data/services/train_match.dart';
 import '../../shared/messages.dart';
 import '../../shared/pick_station.dart';
+import '../../shared/timetable_notice.dart';
 import 'nearby_controller.dart';
 
 /// What the home knows about one direction of a trip.
 class DirectionState {
-  const DirectionState({this.today, this.tomorrow, this.loading = false, this.failed = false});
+  const DirectionState({this.today, this.tomorrow, this.loading = false, this.failed = false, this.notice});
 
   final DayTimetable? today;
   final DayTimetable? tomorrow;
@@ -29,11 +28,15 @@ class DirectionState {
   /// The last download failed and there is nothing cached to show.
   final bool failed;
 
+  /// The server has no timetable for this trip or day, for example "Sin horarios para
+  /// este trayecto". Shown when there is nothing cached.
+  final String? notice;
+
   bool get hasData => today != null || tomorrow != null;
 }
 
 class HomeController extends GetxController with WidgetsBindingObserver {
-  HomeController(this._favorites, this._timetables, this._clock, this.nearby, this.live);
+  HomeController(this._favorites, this._timetables, this._clock, this.nearby);
 
   static const tickInterval = Duration(seconds: 20);
 
@@ -41,7 +44,6 @@ class HomeController extends GetxController with WidgetsBindingObserver {
   final TimetableRepository _timetables;
   final Clock _clock;
   final NearbyController nearby;
-  final LiveTrainRepository live;
 
   final trips = <FavoriteTrip>[].obs;
   final states = <String, DirectionState>{}.obs;
@@ -110,25 +112,15 @@ class HomeController extends GetxController with WidgetsBindingObserver {
 
   DirectionState stateOf(TripDirection d) => states[d.key] ?? const DirectionState();
 
-  List<DateTime> nextOf(TripDirection d, {int count = 3}) {
+  List<Departure> nextOf(TripDirection d, {int count = 3}) {
     final s = stateOf(d);
     return nextDepartures([s.today, s.tomorrow], now.value, count: count);
   }
 
-  /// Line and destination of the departures that matched a real-time train.
-  Map<DateTime, LiveTrain> trainsOf(TripDirection d, List<DateTime> departures) =>
-      matchLiveTrains(departures, live.at(d.originId), _destinationsOf(d));
-
-  /// "L5, L7 hacia Aeroport", for when no departure matched a real-time train.
-  String? summaryOf(TripDirection d) {
-    final s = stateOf(d);
-    return routeSummary(live.firstLegLines([s.today, s.tomorrow], d.originId, d.destinationId), _destinationsOf(d));
-  }
-
   /// The train to take at the change station, for trips with a change of line.
-  Map<DateTime, Connection> connectionsOf(TripDirection d, List<DateTime> departures) {
+  Map<Departure, Departure> connectionsOf(TripDirection d, List<Departure> departures) {
     final s = stateOf(d);
-    return live.connections(departures, [s.today, s.tomorrow], d.destinationId);
+    return findConnections(departures, [s.today, s.tomorrow]);
   }
 
   /// Name of the change station, if the trip has one.
@@ -137,19 +129,10 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     return (s.today?.connection ?? s.tomorrow?.connection)?.stationName;
   }
 
-  List<String> _destinationsOf(TripDirection d) {
-    final s = stateOf(d);
-    return {...?s.today?.destinations, ...?s.tomorrow?.destinations}.toList();
-  }
-
   /// Fresh cache entries are not downloaded again unless [force] is true.
   Future<void> refreshAll({bool force = false}) async {
     final directions = trips.expand((t) => t.directions).toList();
-    final labels = _refreshLive(force: force);
     final results = await Future.wait(directions.map((d) => _refresh(d, force: force)));
-    await labels;
-    // The change stations are known only now. Recent stations are not asked again.
-    await _refreshLive();
     offline.value = results.contains(false);
   }
 
@@ -179,23 +162,11 @@ class HomeController extends GetxController with WidgetsBindingObserver {
     for (final d in added) {
       _refresh(d, force: false);
     }
-    _refreshLive();
     nearby.reevaluate(_directions);
-  }
-
-  Future<void> _refreshLive({bool force = false}) {
-    final changes = _directions.map((d) {
-      final s = stateOf(d);
-      return (s.today?.connection ?? s.tomorrow?.connection)?.stationId;
-    }).nonNulls;
-    return live.refresh([..._directions.map((d) => d.originId), ...changes], force: force);
   }
 
   void _tick() {
     now.value = _clock.now();
-    // The timer can keep running in the background; do not use data there.
-    final lifecycle = WidgetsBinding.instance.lifecycleState;
-    if (lifecycle == null || lifecycle == AppLifecycleState.resumed) _refreshLive();
     if (_today != _serviceDay) {
       _serviceDay = _today;
       _loadFromCache();
@@ -215,33 +186,44 @@ class HomeController extends GetxController with WidgetsBindingObserver {
         today: _timetables.cached(d.originId, d.destinationId, _today),
         tomorrow: _timetables.cached(d.originId, d.destinationId, _tomorrow),
         loading: stateOf(d).loading,
+        notice: stateOf(d).notice,
       );
     }
     states.assignAll(next);
   }
 
-  /// Returns false when a download failed.
+  /// Returns false when the server could not be reached. A timetable the server does
+  /// not have (`no_route`, `date_not_covered`) is a [DirectionState.notice], not a failure.
   Future<bool> _refresh(TripDirection d, {required bool force}) async {
     final before = stateOf(d);
-    states[d.key] = DirectionState(today: before.today, tomorrow: before.tomorrow, loading: true);
+    states[d.key] = DirectionState(
+      today: before.today,
+      tomorrow: before.tomorrow,
+      loading: true,
+      notice: before.notice,
+    );
 
     var ok = true;
-    Future<DayTimetable?> load(DateTime date, DayTimetable? fallback) async {
+    final notices = <String?>[null, null];
+    Future<DayTimetable?> load(int i, DateTime date, DayTimetable? fallback) async {
       try {
         return await _timetables.get(d.originId, d.destinationId, date, force: force);
-      } catch (_) {
-        ok = false;
+      } catch (e) {
+        notices[i] = timetableNotice(e);
+        if (notices[i] == null) ok = false;
         return fallback;
       }
     }
 
-    final days = await Future.wait([load(_today, before.today), load(_tomorrow, before.tomorrow)]);
+    final days = await Future.wait([load(0, _today, before.today), load(1, _tomorrow, before.tomorrow)]);
     // The trip may have been deleted while downloading.
     if (!trips.any((t) => t.directions.any((x) => x.key == d.key))) return ok;
     states[d.key] = DirectionState(
       today: days[0],
       tomorrow: days[1],
       failed: !ok && days[0] == null && days[1] == null,
+      // Today's notice first: it is the one that matters when nothing is shown.
+      notice: notices[0] ?? notices[1],
     );
     return ok;
   }

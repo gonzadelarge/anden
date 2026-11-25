@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/time_format.dart';
 import '../../data/models/incident.dart';
+import '../../shared/open_link.dart';
 import '../../shared/section_header.dart';
 import 'incidents_controller.dart';
 
@@ -20,7 +21,6 @@ class IncidentsView extends GetView<IncidentsController> {
           child: Obx(() {
             final items = controller.items;
             final updated = controller.updatedAt.value;
-            controller.lines.length;
 
             return CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -28,35 +28,50 @@ class IncidentsView extends GetView<IncidentsController> {
                 const SliverToBoxAdapter(child: SectionHeader(overline: 'Avisos', title: 'Incidencias')),
                 SliverToBoxAdapter(child: _Status(updated: updated, offline: controller.offline.value)),
                 if (items.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: updated == null
-                        ? _Empty(
-                            icon: Icons.cloud_off_rounded,
-                            title: controller.loading.value ? 'Cargando…' : 'Sin datos',
-                            text: controller.loading.value ? '' : 'No se pudieron cargar las incidencias.',
-                          )
-                        : const _Empty(
-                            icon: Icons.check_circle_outline_rounded,
-                            title: 'Sin incidencias',
-                            text: 'El servicio funciona con normalidad.',
-                          ),
-                  )
-                else
+                  SliverFillRemaining(hasScrollBody: false, child: _emptyState())
+                else ...[
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                     sliver: SliverList.separated(
                       itemCount: items.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) =>
-                          _IncidentCard(incident: items[i], line: controller.lineName(items[i].lineId), t: t),
+                      itemBuilder: (context, i) => _IncidentCard(incident: items[i], t: t),
                     ),
                   ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 16, 20, 32 + MediaQuery.paddingOf(context).bottom),
+                      child: Text('Fuente: metrovalencia.es', style: TextStyle(fontSize: 12, color: t.faint)),
+                    ),
+                  ),
+                ],
               ],
             );
           }),
         ),
       ),
+    );
+  }
+
+  Widget _emptyState() {
+    if (controller.updatedAt.value == null) {
+      return _Empty(
+        icon: Icons.cloud_off_rounded,
+        title: controller.loading.value ? 'Cargando…' : 'Sin datos',
+        text: controller.loading.value ? '' : 'No se pudieron cargar los avisos.',
+      );
+    }
+    if (!controller.sourceOk.value) {
+      return const _Empty(
+        icon: Icons.cloud_off_rounded,
+        title: 'Avisos no disponibles ahora',
+        text: 'Fuente: metrovalencia.es',
+      );
+    }
+    return const _Empty(
+      icon: Icons.check_circle_outline_rounded,
+      title: 'No hay avisos',
+      text: 'Fuente: metrovalencia.es',
     );
   }
 }
@@ -92,50 +107,83 @@ class _Status extends StatelessWidget {
 }
 
 class _IncidentCard extends StatelessWidget {
-  const _IncidentCard({required this.incident, required this.line, required this.t});
+  const _IncidentCard({required this.incident, required this.t});
 
   final Incident incident;
-  final String line;
+  final AppTokens t;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = incident.url;
+    return Material(
+      color: t.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+        side: BorderSide(color: t.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: url.isEmpty ? null : () => openLink(url),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                incident.categoryLabel.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: incident.priority ? t.accent : t.faint,
+                ),
+              ),
+              if (incident.lines.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [for (final line in incident.lines) _LineBadge(number: line, t: t)],
+                ),
+              ],
+              const SizedBox(height: 10),
+              Text(incident.title, style: TextStyle(fontSize: 15, height: 1.4, color: t.text)),
+              if (url.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text('Ver en metrovalencia.es',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: t.accent)),
+                    const SizedBox(width: 4),
+                    Icon(Icons.open_in_new_rounded, size: 14, color: t.accent),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "L4". Neutral: no official line colours.
+class _LineBadge extends StatelessWidget {
+  const _LineBadge({required this.number, required this.t});
+
+  final int number;
   final AppTokens t;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: t.surface,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: t.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            constraints: const BoxConstraints(minWidth: 44),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(color: t.text, borderRadius: BorderRadius.circular(10)),
-            alignment: Alignment.center,
-            child: Text(
-              line.isEmpty ? '—' : line,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: t.background, fontFeatures: tabular),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (incident.title.isNotEmpty) ...[
-                  Text(incident.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: t.text)),
-                  const SizedBox(height: 4),
-                ],
-                // No start time: FGV recreates every incident (new id and
-                // timestamp) each time it publishes the list.
-                Text(incident.text, style: TextStyle(fontSize: 15, height: 1.4, color: t.text)),
-              ],
-            ),
-          ),
-        ],
+      constraints: const BoxConstraints(minWidth: 36),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(color: t.text, borderRadius: BorderRadius.circular(8)),
+      alignment: Alignment.center,
+      child: Text(
+        'L$number',
+        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: t.background, fontFeatures: tabular),
       ),
     );
   }

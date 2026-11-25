@@ -1,8 +1,13 @@
 # FGV app API
 
+> **The app no longer calls this API** (since 2.0, [plan-server-only.md](plan-server-only.md)).
+> Only the server's verify tool uses it (anden_server). The client `lib/data/api/fgv_api.dart`
+> was deleted; this page is kept for the verify tool and as history. Ids here are FGV ids, not
+> the GTFS ids the app uses now.
+
 Undocumented JSON API behind the official Metrovalencia app, found in the open-source app
 [Valencia Transit Reloaded](https://codeberg.org/albertodiaz/valencia-transit-reloaded).
-No key, no login. It can change or disappear without notice. Client: `lib/data/api/fgv_api.dart`.
+No key, no login. It can change or disappear without notice.
 
 Base URL: `https://www.fgv.es/fgv/app/es/api/v1/V/` (`V` = Valencia). Laravel on Apache.
 Send `Accept: application/json`. Responses have no charset: decode `bodyBytes` as UTF-8.

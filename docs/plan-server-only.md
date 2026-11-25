@@ -1,7 +1,8 @@
 # Plan: app 2.0, data from the own server only
 
-Status: **planned**, nothing built yet. Written 2026-11-25. Starts after server milestone S5
-(v2 endpoints deployed). Decisions V1-V6 and the API shapes live in the server plan:
+Status: **A1 to A8 built** (2026-11-25), version set to 2.0.0+8; publishing (A9) waits for the
+user's test on the phones. Written 2026-11-25, after server milestone S5 (v2 endpoints
+deployed). Decisions V1-V6 and the API shapes live in the server plan:
 [../../anden_server/docs/plan-v2.md](../../anden_server/docs/plan-v2.md). This file covers the
 app only.
 

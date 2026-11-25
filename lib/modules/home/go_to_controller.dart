@@ -4,21 +4,20 @@ import '../../core/clock.dart';
 import '../../core/geo.dart';
 import '../../data/models/day_timetable.dart';
 import '../../data/models/favorite_trip.dart';
-import '../../data/models/live_train.dart';
+import '../../data/models/departure.dart';
 import '../../data/models/station.dart';
 import '../../data/repositories/favorite_stations_repository.dart';
 import '../../data/repositories/home_station_repository.dart';
-import '../../data/repositories/live_train_repository.dart';
 import '../../data/repositories/station_repository.dart';
 import '../../data/repositories/timetable_repository.dart';
 import '../../data/services/connections.dart';
 import '../../data/services/location_service.dart';
 import '../../data/services/nearby_stations.dart';
 import '../../data/services/next_departures.dart';
-import '../../data/services/train_match.dart';
 import '../../data/storage/local_store.dart';
 import '../../shared/messages.dart';
 import '../../shared/pick_station.dart';
+import '../../shared/timetable_notice.dart';
 
 /// "Llévame a casa" and favourite stations: trains from the station nearest to
 /// the user to a chosen destination.
@@ -28,7 +27,6 @@ class GoToController extends GetxController {
     this._favorites,
     this._stations,
     this._timetables,
-    this.live,
     this._location,
     this._store,
     this._clock,
@@ -42,7 +40,6 @@ class GoToController extends GetxController {
   final FavoriteStationsRepository _favorites;
   final StationRepository _stations;
   final TimetableRepository _timetables;
-  final LiveTrainRepository live;
   final LocationService _location;
   final LocalStore _store;
   final Clock _clock;
@@ -60,6 +57,9 @@ class GoToController extends GetxController {
   final loading = false.obs;
   final failed = false.obs;
 
+  /// The server has no timetable for this trip or day. See [timetableNotice].
+  final notice = Rxn<String>();
+
   int _requestId = 0;
   Station? _destination;
 
@@ -70,37 +70,16 @@ class GoToController extends GetxController {
   /// True when the sheet shows the trip to casa.
   bool get goingHome => direction.value?.destinationId == homeStation?.id;
 
-  List<DateTime> next(DateTime now) => nextDepartures([today.value, tomorrow.value], now);
-
-  Map<DateTime, LiveTrain> trains(List<DateTime> departures) {
-    final d = direction.value;
-    if (d == null) return const {};
-    return matchLiveTrains(departures, live.at(d.originId), _destinations);
-  }
-
-  String? get summary {
-    final d = direction.value;
-    return d == null
-        ? null
-        : routeSummary(
-            live.firstLegLines([today.value, tomorrow.value], d.originId, d.destinationId),
-            _destinations,
-          );
-  }
+  List<Departure> next(DateTime now) => nextDepartures([today.value, tomorrow.value], now);
 
   /// The train to take at the change station, for trips with a change of line.
-  Map<DateTime, Connection> connections(List<DateTime> departures) {
-    final d = direction.value;
-    if (d == null) return const {};
-    return live.connections(departures, [today.value, tomorrow.value], d.destinationId);
-  }
+  Map<Departure, Departure> connections(List<Departure> departures) =>
+      findConnections(departures, [today.value, tomorrow.value]);
 
   ConnectionLeg? get _change => today.value?.connection ?? tomorrow.value?.connection;
 
   /// Name of the change station, if the trip has one.
   String? get transferAt => _change?.stationName;
-
-  List<String> get _destinations => {...?today.value?.destinations, ...?tomorrow.value?.destinations}.toList();
 
   Future<void> changeHome() async {
     final station = await pickStation(title: '¿Cuál es tu parada de casa?', subtitle: 'La usará "Llévame a casa"');
@@ -187,28 +166,29 @@ class GoToController extends GetxController {
     today.value = _timetables.cached(d.originId, d.destinationId, day);
     tomorrow.value = _timetables.cached(d.originId, d.destinationId, nextDay);
     failed.value = false;
+    notice.value = null;
     loading.value = true;
-    live.refresh([d.originId]);
 
     var ok = true;
-    Future<DayTimetable?> fetch(DateTime date, DayTimetable? fallback) async {
+    final notices = <String?>[null, null];
+    Future<DayTimetable?> fetch(int i, DateTime date, DayTimetable? fallback) async {
       try {
         return await _timetables.get(d.originId, d.destinationId, date);
-      } catch (_) {
-        ok = false;
+      } catch (e) {
+        notices[i] = timetableNotice(e);
+        if (notices[i] == null) ok = false;
         return fallback;
       }
     }
 
-    final days = await Future.wait([fetch(day, today.value), fetch(nextDay, tomorrow.value)]);
+    final days = await Future.wait([fetch(0, day, today.value), fetch(1, nextDay, tomorrow.value)]);
     if (request != _requestId) return;
     today.value = days[0];
     tomorrow.value = days[1];
     failed.value = !ok && days[0] == null && days[1] == null;
+    // With data, an empty list means "no more trains today", not a missing timetable.
+    notice.value = days[0] == null && days[1] == null ? notices[0] ?? notices[1] : null;
     loading.value = false;
-    // The change station is known only now.
-    final change = _change;
-    if (change != null) live.refresh([change.stationId]);
   }
 
   Future<GeoPoint?> _position() async {

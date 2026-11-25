@@ -2,31 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../core/time_format.dart';
-import '../../../data/models/live_train.dart';
-import '../../../data/services/connections.dart';
+import '../../../data/models/departure.dart';
 import '../../../shared/connection_label.dart';
+import '../../../shared/train_label.dart';
 
-/// The next departures: the first one large, then the rest.
-///
-/// [trains] holds the line and destination of the departures that matched a
-/// real-time train. When none did, [summary] says what serves the trip.
-/// [connections] holds the train to take at the change station [transferAt].
+/// The next departures: the first one large, then the rest, each with its line and
+/// destination. [connections] holds the train to take at the change station [transferAt].
 class Departures extends StatelessWidget {
   const Departures({
     super.key,
     required this.next,
     required this.now,
-    this.trains = const {},
-    this.summary,
     this.connections = const {},
     this.transferAt,
   });
 
-  final List<DateTime> next;
+  final List<Departure> next;
   final DateTime now;
-  final Map<DateTime, LiveTrain> trains;
-  final String? summary;
-  final Map<DateTime, Connection> connections;
+  final Map<Departure, Departure> connections;
   final String? transferAt;
 
   @override
@@ -34,11 +27,9 @@ class Departures extends StatelessWidget {
     final t = AppTokens.of(context);
     final first = next.first;
     final later = next.skip(1);
-    final firstTrain = trains[first];
     final firstConnection = connections[first];
-    final fallback = trains.isEmpty ? summary : null;
     // The "mañana" tag leaves no room beside the time.
-    final connectionBelow = isAfterToday(first, now);
+    final connectionBelow = isAfterToday(first.at, now);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -47,7 +38,7 @@ class Departures extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
-              formatTime(first),
+              formatTime(first.at),
               style: TextStyle(
                 fontSize: 44,
                 fontWeight: FontWeight.w600,
@@ -57,7 +48,7 @@ class Departures extends StatelessWidget {
                 fontFeatures: tabular,
               ),
             ),
-            if (isAfterToday(first, now)) ...[
+            if (isAfterToday(first.at, now)) ...[
               const SizedBox(width: 10),
               _Tag(label: 'mañana', color: t.muted, background: t.background),
             ],
@@ -70,21 +61,15 @@ class Departures extends StatelessWidget {
               )
             else
               const Spacer(),
-            _Tag(label: formatUntil(first, now), color: t.accent, background: t.accentSoft),
+            _Tag(label: formatUntil(first.at, now), color: t.accent, background: t.accentSoft),
           ],
         ),
         if (firstConnection != null && connectionBelow) ...[
           const SizedBox(height: 8),
           ConnectionLabel(connection: firstConnection, maxLines: 1),
         ],
-        if (firstTrain != null) ...[
-          const SizedBox(height: 8),
-          _TrainLabel(train: firstTrain),
-        ],
-        if (fallback != null) ...[
-          const SizedBox(height: 8),
-          Text(fallback, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: t.muted)),
-        ],
+        const SizedBox(height: 8),
+        TrainLabel(train: first),
         if (transferAt != null) ...[
           const SizedBox(height: 4),
           Text(
@@ -96,35 +81,22 @@ class Departures extends StatelessWidget {
         ],
         if (later.isNotEmpty) ...[
           const SizedBox(height: 12),
-          if (trains.isEmpty && connections.isEmpty)
-            Row(
-              children: [
-                Text('Después', style: TextStyle(fontSize: 13, color: t.faint)),
-                for (final time in later) ...[
-                  const SizedBox(width: 16),
-                  _LaterTime(time: time, now: now, first: first),
-                ],
-              ],
-            )
-          else
-            // One train per row, because each one has its own label.
-            for (final (i, time) in later.indexed)
-              Padding(
-                padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
-                child: Row(
-                  children: [
-                    _LaterTime(time: time, now: now, first: first),
-                    if (trains[time] != null) ...[
-                      const SizedBox(width: 12),
-                      Expanded(flex: 2, child: _TrainLabel(train: trains[time]!)),
-                    ],
-                    if (connections[time] != null) ...[
-                      const SizedBox(width: 8),
-                      Expanded(flex: 3, child: ConnectionLabel(connection: connections[time]!, maxLines: 1)),
-                    ],
+          // One train per row, because each one has its own label.
+          for (final (i, train) in later.indexed)
+            Padding(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
+              child: Row(
+                children: [
+                  _LaterTime(time: train.at, now: now, first: first.at),
+                  const SizedBox(width: 12),
+                  Expanded(flex: 2, child: TrainLabel(train: train)),
+                  if (connections[train] != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(flex: 3, child: ConnectionLabel(connection: connections[train]!, maxLines: 1)),
                   ],
-                ),
+                ],
               ),
+            ),
         ],
       ],
     );
@@ -153,32 +125,6 @@ class _LaterTime extends StatelessWidget {
             padding: const EdgeInsets.only(left: 4),
             child: Text('mañana', style: TextStyle(fontSize: 12, color: t.faint)),
           ),
-      ],
-    );
-  }
-}
-
-/// "L5 Aeroport". Neutral text: no official line colours.
-class _TrainLabel extends StatelessWidget {
-  const _TrainLabel({required this.train});
-
-  final LiveTrain train;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = AppTokens.of(context);
-    return Row(
-      children: [
-        Text(train.lineName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: t.text)),
-        const SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            train.destination,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: t.muted),
-          ),
-        ),
       ],
     );
   }

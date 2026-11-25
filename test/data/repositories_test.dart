@@ -1,269 +1,188 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:anden/core/clock.dart';
 import 'package:anden/data/api/anden_server_api.dart';
-import 'package:anden/data/api/fgv_api.dart';
 import 'package:anden/data/models/favorite_trip.dart';
 import 'package:anden/data/repositories/favorites_repository.dart';
+import 'package:anden/data/repositories/incident_repository.dart';
 import 'package:anden/data/repositories/station_repository.dart';
 import 'package:anden/data/repositories/timetable_repository.dart';
 import 'package:anden/data/storage/local_store.dart';
+import 'package:anden/data/storage/schema.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
+
+import '../support/fake_server.dart';
 
 void main() {
-  final timetableBody = File('test/fixtures/horarios_online2_amistat_colon.json').readAsStringSync();
-  final stationsBody = File('test/fixtures/estaciones_sample.json').readAsStringSync();
-
   late MemoryStore store;
   late FixedClock clock;
-  late List<http.Request> requests;
-  late bool serverDown;
+  late FakeServer server;
 
-  FgvApi api() => FgvApi(
-        MockClient((request) async {
-          requests.add(request);
-          if (serverDown) return http.Response('"Error obteniendo horarios"', 400);
-          final body = request.url.path.endsWith('estaciones') ? stationsBody : timetableBody;
-          return http.Response.bytes(utf8.encode(body), 200);
-        }),
-        now: clock.now,
-      );
+  AndenServerApi api({String url = FakeServer.url}) =>
+      AndenServerApi(server.client, baseUrl: url, token: FakeServer.token, now: clock.now);
 
   setUp(() {
     store = MemoryStore();
-    clock = FixedClock(DateTime(2026, 10, 27, 8));
-    requests = [];
-    serverDown = false;
+    clock = FixedClock(DateTime(2026, 11, 26, 8));
+    server = FakeServer();
   });
 
   group('TimetableRepository', () {
-    test('sends ids and a DD/MM/YYYY date', () async {
-      await TimetableRepository(api(), store, clock).get(560, 552, DateTime(2026, 10, 27));
+    final day = DateTime(2026, 11, 26);
 
-      expect(requests.single.url.toString(), 'https://www.fgv.es/fgv/app/es/api/v1/V/horarios-online2');
-      expect(jsonDecode(requests.single.body), {
-        'estacion_origen_id': 560,
-        'estacion_destino_id': 552,
-        'fecha': '27/10/2026',
-      });
+    test('asks /v2/timetable with GTFS ids, the token and an ISO date', () async {
+      final t = await TimetableRepository(api(), store, clock).get(121, 70, day);
+
+      final request = server.requests.single;
+      expect(request.url.toString(), 'https://anden.example.com/v2/timetable?from=121&to=70&date=2026-11-26');
+      expect(request.headers['Authorization'], 'Bearer secret');
+      expect(t.departures, hasLength(130));
+      expect(t.departures.first.lineName, 'L5');
+      expect(t.fetchedAt, clock.now());
     });
 
     test('uses a fresh cache entry without a request', () async {
       final repo = TimetableRepository(api(), store, clock);
-      await repo.get(560, 552, DateTime(2026, 10, 27));
+      await repo.get(121, 70, day);
       clock.value = clock.value.add(const Duration(hours: 11));
-      await repo.get(560, 552, DateTime(2026, 10, 27));
+      await repo.get(121, 70, day);
 
-      expect(requests, hasLength(1));
+      expect(server.requests, hasLength(1));
     });
 
     test('downloads again when the entry is old or forced', () async {
       final repo = TimetableRepository(api(), store, clock);
-      await repo.get(560, 552, DateTime(2026, 10, 27));
-      await repo.get(560, 552, DateTime(2026, 10, 27), force: true);
+      await repo.get(121, 70, day);
+      await repo.get(121, 70, day, force: true);
       clock.value = clock.value.add(const Duration(hours: 13));
-      await repo.get(560, 552, DateTime(2026, 10, 27));
+      await repo.get(121, 70, day);
 
-      expect(requests, hasLength(3));
+      expect(server.requests, hasLength(3));
     });
 
-    test('throws when the server fails, and keeps the cache', () async {
+    test('throws when offline, and keeps the cache', () async {
       final repo = TimetableRepository(api(), store, clock);
-      await repo.get(560, 552, DateTime(2026, 10, 27));
-      serverDown = true;
+      await repo.get(121, 70, day);
+      server.down = true;
 
       await expectLater(
-        repo.get(560, 552, DateTime(2026, 10, 27), force: true),
-        throwsA(isA<FgvApiException>().having((e) => e.statusCode, 'statusCode', 400)),
+        repo.get(121, 70, day, force: true),
+        throwsA(isA<AndenServerException>().having((e) => e.isNoTimetable, 'isNoTimetable', isFalse)),
       );
-      expect(repo.cached(560, 552, DateTime(2026, 10, 27))?.departures, hasLength(130));
+      expect(repo.cached(121, 70, day)?.departures, hasLength(130));
     });
 
-    test('prunes past days only', () async {
+    test('no_route and date_not_covered come out as such', () async {
       final repo = TimetableRepository(api(), store, clock);
-      await repo.get(560, 552, DateTime(2026, 10, 26));
-      await repo.get(560, 552, DateTime(2026, 10, 27));
-      await repo.prunePastDays();
-
-      expect(repo.cached(560, 552, DateTime(2026, 10, 26)), isNull);
-      expect(repo.cached(560, 552, DateTime(2026, 10, 27)), isNotNull);
-    });
-  });
-
-  group('TimetableRepository with the own server', () {
-    // What the server sends (anden_server docs/plan.md, section 6).
-    Map<String, dynamic> serverBody({int legs = 1}) => {
-          'originId': 560,
-          'destinationId': 552,
-          'date': '2026-10-27',
-          'departures': ['05:49', '06:11'],
-          'durationMinutes': 5,
-          'legs': legs,
-          'destinations': ['Aeroport'],
-          'connection': legs == 1
-              ? null
-              : {
-                  'stationId': 554,
-                  'stationName': 'Àngel Guimerà',
-                  'rideMinutes': 8,
-                  'departures': ['06:05'],
-                  'destinations': ['Riba-roja de Túria'],
-                },
-          'feedDate': '2026-10-26',
-        };
-
-    late int serverStatus;
-    late Map<String, dynamic> serverAnswer;
-
-    TimetableRepository repo({String url = 'https://anden.example.com'}) {
-      final client = MockClient((request) async {
-        requests.add(request);
-        if (request.url.host == 'anden.example.com') {
-          if (serverStatus != 200) {
-            return http.Response('{"error":"no_route","message":"x"}', serverStatus);
-          }
-          return http.Response.bytes(utf8.encode(jsonEncode(serverAnswer)), 200);
-        }
-        if (serverDown) return http.Response('"Error obteniendo horarios"', 400);
-        return http.Response.bytes(utf8.encode(timetableBody), 200);
-      });
-      return TimetableRepository(
-        FgvApi(client, now: clock.now),
-        store,
-        clock,
-        server: AndenServerApi(client, baseUrl: url, token: 'secret', now: clock.now),
-      );
-    }
-
-    List<String> hosts() => requests.map((r) => r.url.host).toList();
-
-    setUp(() {
-      serverStatus = 200;
-      serverAnswer = serverBody();
+      for (final code in [AndenServerException.noRoute, AndenServerException.dateNotCovered]) {
+        server.timetableError = code;
+        await expectLater(
+          repo.get(121, 70, day),
+          throwsA(isA<AndenServerException>()
+              .having((e) => e.code, 'code', code)
+              .having((e) => e.isNoTimetable, 'isNoTimetable', isTrue)),
+        );
+      }
+      expect(repo.cached(121, 70, day), isNull);
     });
 
-    test('asks the server first, with the token and an ISO date', () async {
-      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
-
-      final request = requests.single;
-      expect(request.url.toString(), 'https://anden.example.com/v1/timetable?from=560&to=552&date=2026-10-27');
-      expect(request.headers['Authorization'], 'Bearer secret');
-      expect(t.departures, [DateTime(2026, 10, 27, 5, 49), DateTime(2026, 10, 27, 6, 11)]);
-      expect(t.fetchedAt, clock.now());
-      expect(repo().cached(560, 552, DateTime(2026, 10, 27))?.departures, hasLength(2));
+    test('without a URL every call fails', () async {
+      await expectLater(TimetableRepository(api(url: ''), store, clock).get(121, 70, day), throwsA(isA<AndenServerException>()));
+      expect(server.requests, isEmpty);
     });
 
-    test('asks FGV when the server fails', () async {
-      serverStatus = 404;
-      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
-
-      expect(hosts(), ['anden.example.com', 'www.fgv.es']);
-      expect(t.departures, hasLength(130));
-    });
-
-    test('throws the FGV error when both fail, and keeps the cache', () async {
-      final r = repo();
-      await r.get(560, 552, DateTime(2026, 10, 27));
-      serverStatus = 503;
-      serverDown = true;
-
-      await expectLater(
-        r.get(560, 552, DateTime(2026, 10, 27), force: true),
-        throwsA(isA<FgvApiException>().having((e) => e.statusCode, 'statusCode', 400)),
-      );
-      expect(r.cached(560, 552, DateTime(2026, 10, 27))?.departures, hasLength(2));
-    });
-
-    test('a change of line asks FGV after the server, and keeps FGV', () async {
-      serverAnswer = serverBody(legs: 2);
-      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
-
-      expect(hosts(), ['anden.example.com', 'www.fgv.es']);
-      expect(t.departures, hasLength(130));
-    });
-
-    test('a change of line uses the server when FGV fails', () async {
-      serverAnswer = serverBody(legs: 2);
-      serverDown = true;
-      final t = await repo().get(560, 552, DateTime(2026, 10, 27));
+    test('keeps the change of line with its ride time', () async {
+      server.timetableFile = 'timetable_sant_isidre_ribaroja.json';
+      final t = await TimetableRepository(api(), store, clock).get(78, 186, day);
 
       expect(t.legs, 2);
-      expect(t.connection!.stationId, 554);
+      expect(t.connection!.stationId, 25);
       expect(t.connection!.rideMinutes, 8);
       expect(t.complete, isTrue);
     });
 
-    test('a cached change of line asks FGV first, the server only if FGV fails', () async {
-      serverAnswer = serverBody(legs: 2);
-      serverDown = true;
-      final r = repo();
-      await r.get(560, 552, DateTime(2026, 10, 27));
-      requests.clear();
-
-      await r.get(560, 552, DateTime(2026, 10, 27), force: true);
-      expect(hosts(), ['www.fgv.es', 'anden.example.com']);
-
-      serverDown = false;
-      requests.clear();
-      await r.get(560, 552, DateTime(2026, 10, 27), force: true);
-      expect(hosts(), ['www.fgv.es']);
+    test('knows the newest feed date of its cache', () async {
+      final repo = TimetableRepository(api(), store, clock);
+      expect(repo.newestFeedDate(), isNull);
+      await repo.get(121, 70, day);
+      expect(repo.newestFeedDate(), '2026-11-24');
     });
 
-    test('without a URL the server is off and FGV is asked alone', () async {
-      await repo(url: '').get(560, 552, DateTime(2026, 10, 27));
+    test('prunes past days only', () async {
+      final repo = TimetableRepository(api(), store, clock);
+      await repo.get(121, 70, DateTime(2026, 11, 25));
+      await repo.get(121, 70, day);
+      await repo.prunePastDays();
 
-      expect(hosts(), ['www.fgv.es']);
-    });
-
-    test('an answer for another date is not used', () async {
-      serverAnswer = {...serverBody(), 'date': '2026-10-28'};
-      await repo().get(560, 552, DateTime(2026, 10, 27));
-
-      expect(hosts(), ['anden.example.com', 'www.fgv.es']);
+      expect(repo.cached(121, 70, DateTime(2026, 11, 25)), isNull);
+      expect(repo.cached(121, 70, day), isNotNull);
     });
   });
 
   group('StationRepository', () {
-    test('downloads, sorts and caches stations', () async {
+    test('downloads, sorts and caches stations with their feed date', () async {
       final repo = StationRepository(api(), store, clock);
       final stations = await repo.getStations();
 
-      expect(stations.map((s) => s.name), ['Amistat', 'Àngel Guimerà', 'Benimaclet', 'Colón']);
+      expect(stations, hasLength(144));
+      expect(stations.first.name, 'À Punt');
       final colon = stations.firstWhere((s) => s.name == 'Colón');
-      expect(colon.id, 552);
-      expect(colon.fgvId, 15);
+      expect(colon.id, 70);
+      expect(colon.lines, [3, 5, 7, 9]);
+      expect(repo.feedDate(), '2026-11-24');
 
       await repo.getStations();
-      expect(requests, hasLength(1));
-      expect(repo.cached(), hasLength(4));
+      expect(server.requests, hasLength(1));
+      expect(repo.cached(), hasLength(144));
+    });
+
+    test('"Àngel Guimerà" sorts with the A', () async {
+      final names = (await StationRepository(api(), store, clock).getStations()).map((s) => s.name).toList();
+      expect(names.indexOf('Àngel Guimerà'), lessThan(names.indexOf('Benimaclet')));
     });
 
     test('falls back to an old list when offline', () async {
       final repo = StationRepository(api(), store, clock);
       await repo.getStations();
       clock.value = clock.value.add(const Duration(days: 8));
-      serverDown = true;
+      server.down = true;
 
-      expect(await repo.getStations(), hasLength(4));
+      expect(await repo.getStations(), hasLength(144));
+    });
+  });
+
+  group('IncidentRepository', () {
+    test('downloads and caches the notices in the server order', () async {
+      final repo = IncidentRepository(api(), store, clock);
+      final answer = await repo.fetch();
+
+      expect(answer.ok, isTrue);
+      expect(answer.items.map((i) => i.priority), [true, false, false]);
+      expect(answer.readAt, DateTime.utc(2026, 11, 25, 20, 47, 55).toLocal());
+
+      final cached = repo.cached()!;
+      expect(cached.fetchedAt, clock.now());
+      expect(cached.answer.items, hasLength(3));
+      expect(cached.answer.items.first.lines, [4]);
+    });
+
+    test('throws when offline', () async {
+      server.down = true;
+      await expectLater(IncidentRepository(api(), store, clock).fetch(), throwsA(isA<AndenServerException>()));
     });
   });
 
   group('FavoritesRepository', () {
-    const trip = FavoriteTrip(aId: 560, aName: 'Amistat', bId: 552, bName: 'Colón');
+    const trip = FavoriteTrip(aId: 121, aName: 'Amistat', bId: 70, bName: 'Colón');
 
     test('saves a trip once, in either direction', () async {
       final repo = FavoritesRepository(store);
 
       expect(await repo.add(trip), isTrue);
-      expect(await repo.add(const FavoriteTrip(aId: 552, aName: 'Colón', bId: 560, bName: 'Amistat')), isFalse);
+      expect(await repo.add(const FavoriteTrip(aId: 70, aName: 'Colón', bId: 121, bName: 'Amistat')), isFalse);
       expect(repo.all(), hasLength(1));
     });
 
     test('a trip gives both directions', () {
-      expect(trip.directions.map((d) => d.key), ['560-552', '552-560']);
+      expect(trip.directions.map((d) => d.key), ['121-70', '70-121']);
     });
 
     test('revision goes up on every change', () async {
@@ -274,13 +193,35 @@ void main() {
       expect(repo.revision.value, 2);
       expect(repo.contains(trip.id), isFalse);
     });
+  });
 
-    test('removes a trip', () async {
-      final repo = FavoritesRepository(store);
-      await repo.add(trip);
-      await repo.remove(trip.id);
+  group('migrateStore', () {
+    test('erases a 1.x box except the two prompt flags, once', () async {
+      for (final key in [
+        'favorites',
+        'home_station',
+        'favorite_stations',
+        'learned_places',
+        'stations',
+        'lines',
+        'tt:560:552:20261126',
+        'incidents',
+      ]) {
+        await store.write(key, 'old');
+      }
+      await store.write('location_prompt', 'accepted');
+      await store.write('precise_prompt', true);
 
-      expect(repo.all(), isEmpty);
+      await migrateStore(store);
+      expect(store.keys.toSet(), {'location_prompt', 'precise_prompt', 'schema'});
+      expect(store.read<int>('schema'), storeSchema);
+      expect(store.read<String>('location_prompt'), 'accepted');
+
+      await store.write('favorites', const [
+        {'aId': 121, 'aName': 'Amistat', 'bId': 70, 'bName': 'Colón'},
+      ]);
+      await migrateStore(store);
+      expect(FavoritesRepository(store).all(), hasLength(1));
     });
   });
 }

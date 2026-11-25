@@ -1,37 +1,46 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:anden/data/models/incident.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/fake_server.dart';
+
 void main() {
-  // Real response of GET incidencias, 25/10/2026.
-  Map<String, dynamic> fixture() =>
-      jsonDecode(File('test/fixtures/incidencias.json').readAsStringSync()) as Map<String, dynamic>;
+  // Real answer of /v2/incidents, 2026-11-25.
+  List<Incident> parse() => ((jsonDecode(fixture('incidents.json')) as Map<String, dynamic>)['incidents'] as List)
+      .map((i) => Incident.fromJson(i as Map<String, dynamic>))
+      .toList();
 
-  test('joins incidents with their Spanish text', () {
-    final list = Incident.listFromApi(fixture());
+  test('reads the real server answer', () {
+    final list = parse();
 
-    expect(list.map((i) => i.lineId), [45, 47, 45]);
-    expect(list.first.text, 'Por descarrilo, circulación interrumpida entre Empalme y Dr. Lluch');
-    expect(list.first.title, isEmpty);
+    expect(list, hasLength(3));
+    expect(list.first.priority, isTrue);
+    expect(list.first.categoryLabel, 'Incidencia');
+    expect(list.first.lines, [4]);
+    expect(list.first.title, startsWith('Por reorganización del servicio'));
+    expect(list.first.url, isEmpty);
+    expect(list[1].categoryLabel, 'Servicio especial');
+    expect(list[1].lines, [1, 2, 3, 6, 7, 9, 10]);
+    expect(list[1].url, startsWith('https://www.metrovalencia.es/'));
   });
 
-  test('picks another language when asked', () {
-    final list = Incident.listFromApi(fixture(), locale: 'CA');
-    expect(list.first.text, startsWith('Per descarrilament'));
+  test('survives a cache round trip', () {
+    final original = parse()[1];
+    final copy = Incident.fromJson(jsonDecode(jsonEncode(original.toJson())) as Map<String, dynamic>);
+
+    expect(copy.category, original.category);
+    expect(copy.priority, original.priority);
+    expect(copy.title, original.title);
+    expect(copy.lines, original.lines);
+    expect(copy.url, original.url);
   });
 
-  test('skips deleted incidents and incidents without text', () {
-    final json = fixture();
-    (json['incidencias'] as List).first['deleted_at'] = '2026-10-25T10:00:00.000000Z';
-    json['incidencias_translations'] =
-        (json['incidencias_translations'] as List).where((t) => t['incidencia_id'] != 11674856).toList();
-
-    expect(Incident.listFromApi(json).map((i) => i.id), [11674857]);
-  });
-
-  test('an empty body gives no incidents', () {
-    expect(Incident.listFromApi({'incidencias': [], 'incidencias_translations': []}), isEmpty);
+  test('an unknown category is written out', () {
+    expect(
+      const Incident(category: 'obras_en_via', priority: false, title: 'x', lines: []).categoryLabel,
+      'Obras en via',
+    );
+    expect(const Incident(category: '', priority: false, title: 'x', lines: []).categoryLabel, 'Aviso');
   });
 }

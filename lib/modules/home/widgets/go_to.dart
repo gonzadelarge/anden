@@ -251,8 +251,6 @@ class _TrainsSheet extends GetView<GoToController> {
           final d = controller.direction.value;
           if (d == null) return const SizedBox.shrink();
           final now = home.now.value;
-          // Read this so Obx rebuilds when the labels arrive.
-          controller.live.revision.value;
           final next = controller.next(now);
 
           void openDay() {
@@ -286,8 +284,6 @@ class _TrainsSheet extends GetView<GoToController> {
                   child: Departures(
                     next: next,
                     now: now,
-                    trains: controller.trains(next),
-                    summary: controller.summary,
                     connections: controller.connections(next),
                     transferAt: controller.transferAt,
                   ),
@@ -335,7 +331,8 @@ class _TrainsSheet extends GetView<GoToController> {
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          controller.failed.value ? 'No se pudieron cargar los horarios' : 'No hay más trenes hoy',
+          controller.notice.value ??
+              (controller.failed.value ? 'No se pudieron cargar los horarios' : 'No hay más trenes hoy'),
           style: TextStyle(color: t.muted),
         ),
       ),

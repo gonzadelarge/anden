@@ -1,6 +1,6 @@
 import '../../core/clock.dart';
 import '../../core/text_normalize.dart';
-import '../api/fgv_api.dart';
+import '../api/anden_server_api.dart';
 import '../models/station.dart';
 import '../storage/local_store.dart';
 
@@ -10,7 +10,7 @@ class StationRepository {
   static const _key = 'stations';
   static const maxAge = Duration(days: 7);
 
-  final FgvApi _api;
+  final AndenServerApi _api;
   final LocalStore _store;
   final Clock _clock;
 
@@ -21,6 +21,9 @@ class StationRepository {
     return (entry['items'] as List).map((s) => Station.fromJson(Map<String, dynamic>.from(s as Map))).toList();
   }
 
+  /// GTFS feed date of the cached list, "2026-11-24". Null before the first download.
+  String? feedDate() => _store.read<Map<String, dynamic>>(_key)?['feedDate'] as String?;
+
   /// Returns the cached list while it is fresh. Downloads it otherwise. If the
   /// download fails and an old list exists, the old list is returned.
   Future<List<Station>> getStations({bool force = false}) async {
@@ -30,15 +33,17 @@ class StationRepository {
     if (fresh && !force) return cached();
 
     try {
-      final stations = await _api.fetchStations();
-      // Plain compareTo would put "Àngel Guimerà" after "Z".
-      stations.sort((a, b) => normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)));
+      final answer = await _api.fetchStations();
+      final stations = [...answer.stations]
+        // Plain compareTo would put "Àngel Guimerà" after "Z".
+        ..sort((a, b) => normalizeForSearch(a.name).compareTo(normalizeForSearch(b.name)));
       await _store.write(_key, {
         'fetchedAt': _clock.now().toIso8601String(),
+        'feedDate': answer.feedDate,
         'items': stations.map((s) => s.toJson()).toList(),
       });
       return stations;
-    } on FgvApiException {
+    } on AndenServerException {
       final old = cached();
       if (old.isNotEmpty) return old;
       rethrow;
